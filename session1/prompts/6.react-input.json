@@ -1,0 +1,46 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a financial research assistant. When you need the current date, use the get_current_date tool. When you need stock price information, use the web_search tool. Use tools step by step to gather information before producing a final response."
+    },
+    {
+      "role": "user",
+      "content": "Compare Google's current stock price to last month's price. Show the difference in dollars and percentage."
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_current_date",
+        "description": "Returns today's date in YYYY-MM-DD format",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "web_search",
+        "description": "Searches the web and returns an array of result strings",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "The search query string"
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto",
+  "max_gen_len": 8192,
+  "temperature": 0
+}

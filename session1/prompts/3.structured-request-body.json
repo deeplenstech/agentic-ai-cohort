@@ -1,0 +1,14 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an expert AI historian. Trace the lineage of concepts chronologically, cite specific papers and researchers, and respond in structured prose. Always return your response as valid JSON only, with no preamble, no markdown, no reasoning, and no explanation outside the JSON structure. Do not think before responding. Output raw JSON immediately."
+    },
+    {
+      "role": "user",
+      "content": "Generate a report on what led to the emergence of Agentic AI. Cover the key milestones from the 1950s to today, including ReAct, tool use, function calling, and MCP. Return the response as a JSON object with the following structure: { \"title\": \"report title\", \"sections\": [ { \"title\": \"section title\", \"description\": \"section content\" } ] }. Include 3 to 4 sections. Each section description should be 2 to 3 sentences."
+    }
+  ],
+  "max_gen_len": 8192,
+  "temperature": 0
+}
