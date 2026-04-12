@@ -54,12 +54,12 @@ You'll be prompted for your AWS Access Key ID, Secret Access Key, default region
 
 The [`scripts/`](scripts/) folder contains a set of progressively more involved examples, all invoking a model via `aws bedrock-runtime invoke-model`:
 
-- **[2.system-user.sh](scripts/2.system-user.sh)** — A basic call with a system and user message. The prompt ([1.prompts.md](scripts/1.prompts.md)) asks the model to generate a report on the history of Agentic AI. The request body is in [2.request-body.json](scripts/2.request-body.json).
+- **[2.system-user.sh](scripts/2.system-user.sh)** — A basic call with a system and user message. The prompt ([1.prompts.md](scripts/1.prompts.md)) asks the model to generate a report on the history of Agentic AI. The request body is in [2.request-body.json](scripts/2.request-body.json). Output is saved to [2.invoke-model-output.json](scripts/2.invoke-model-output.json).
 
-- **[3.structured-system-user.sh](scripts/3.structured-system-user.sh)** — Same prompt, but the system message now instructs the model to return a structured JSON response. Request body in [3.structured-request-body.json](scripts/3.structured-request-body.json).
+- **[3.structured-system-user.sh](scripts/3.structured-system-user.sh)** — Same prompt, but the system message now instructs the model to return a structured JSON response. Request body in [3.structured-request-body.json](scripts/3.structured-request-body.json). Output is saved to [3.structured-invoke-model-output.json](scripts/3.structured-invoke-model-output.json).
 
-- **[4.structured-v2-system-user.sh](scripts/4.structured-v2-system-user.sh)** — Extends script 3 by post-processing the output with a small Python snippet that strips any `<reasoning>...</reasoning>` blocks from the response before saving the final JSON.
+- **[4.structured-v2-system-user.sh](scripts/4.structured-v2-system-user.sh)** — Extends script 3 by post-processing the output with a small Python snippet that strips any `<reasoning>...</reasoning>` blocks from the response before saving the final JSON. Output is saved to [4.structured-v2-invoke-model-output.json](scripts/4.structured-v2-invoke-model-output.json).
 
-- **[6.react-loop.sh](scripts/6.react-loop.sh)** — Sends a ReAct-style prompt ([5.react-prompt.md](scripts/5.react-prompt.md)) asking the model to compare stock prices. The script extracts the model's response and prints either the text content or any tool calls it requested — illustrating the first step of the ReAct loop. To simulate the next step, you can manually add a tool result to [6.react-input.json](scripts/6.react-input.json) and re-run the script, mimicking what an orchestration framework like CrewAI does automatically.
+- **[6.react-loop.sh](scripts/6.react-loop.sh)** — Sends a ReAct-style prompt ([5.react-prompt.md](scripts/5.react-prompt.md)) asking the model to compare stock prices. The script extracts the model's response and prints either the text content or any tool calls it requested — illustrating the first step of the ReAct loop. Output is saved to [6.tmp-model-output.json](scripts/6.tmp-model-output.json). To simulate the next step, you can manually add a tool result to [6.react-input.json](scripts/6.react-input.json) and re-run the script, mimicking what an orchestration framework like CrewAI does automatically.
 
 ---
