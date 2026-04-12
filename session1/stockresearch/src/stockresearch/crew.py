@@ -1,3 +1,4 @@
+import os
 from crewai import Agent, Crew, Task, LLM
 from pydantic import BaseModel, Field
 from crewai_tools import SerperDevTool
@@ -20,7 +21,7 @@ stock_researcher = Agent(
         "developments on a stock. Known for your ability to find the most relevant "
         "information and present it in a clear and concise manner."
     ),
-    llm="anthropic/claude-sonnet-4-6",
+    llm=os.environ["MODEL_ID"],
     tools=[GetCurrentDateTool(), SerperDevTool()]
 )
 
