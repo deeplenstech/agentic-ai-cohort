@@ -1,8 +1,8 @@
 # Session 1
 
-## Key Pre-req
+## Key Pre-requisites
 
-Work through these Pre-req to build the foundational knowledge needed before working on the assignments:
+Work through these pre-requisites to build the foundational knowledge needed before working on the assignments:
 
 1. **Neural Networks Simply Explained** — What a neural network is and how it learns
 
