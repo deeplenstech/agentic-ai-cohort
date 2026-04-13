@@ -9,6 +9,8 @@ dependencies = [
     "crewai[anthropic,tools]",
     "langfuse>=3.5.0",
     "openinference-instrumentation-crewai>=0.1.13",
+    "openinference-instrumentation-litellm",
+    "opentelemetry-exporter-otlp-proto-http",
     "crewai",
     "openlit",
     "crewai_tools",

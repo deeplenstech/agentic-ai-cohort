@@ -57,5 +57,4 @@ crew = Crew(
     agents=[stock_researcher],
     tasks=[research_task, format_task],
     verbose=True,
-    tracing=True
 )
