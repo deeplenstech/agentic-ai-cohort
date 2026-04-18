@@ -31,37 +31,39 @@ BedrockCompletion._get_inference_config = _get_inference_config_no_stop
 #   "name": "'tavily_search'"  →  should be  "name": "tavily_search"
 #   "arguments": "'{\"q\": 1}'"  →  should be  "arguments": "{\"q\": 1}"
 # This makes tool-name lookup fail and JSON argument parsing fail.
-_orig_parse = CrewAgentExecutor._parse_native_tool_call
+#
+# Only applies to crewai >= 1.14.x where _parse_native_tool_call exists.
+if hasattr(CrewAgentExecutor, "_parse_native_tool_call"):
+    _orig_parse = CrewAgentExecutor._parse_native_tool_call
 
-def _strip_bedrock_quotes(value: str) -> str:
-    """Strip a single layer of wrapping single-quotes added by Bedrock serialization."""
-    if isinstance(value, str) and len(value) >= 2 and value[0] == "'" and value[-1] == "'":
-        return value[1:-1]
-    return value
+    def _strip_bedrock_quotes(value: str) -> str:
+        if isinstance(value, str) and len(value) >= 2 and value[0] == "'" and value[-1] == "'":
+            return value[1:-1]
+        return value
 
-def _parse_native_tool_call_fixed(self, tool_call):
-    if isinstance(tool_call, dict):
-        # Case 1 — raw Bedrock toolUse block (no "function" wrapper)
-        if "input" in tool_call and "function" not in tool_call:
-            from crewai.utilities.agent_utils import sanitize_tool_name
-            call_id = (
-                tool_call.get("id")
-                or tool_call.get("toolUseId")
-                or f"call_{id(tool_call)}"
-            )
-            func_name = sanitize_tool_name(tool_call.get("name", ""))
-            func_args = tool_call.get("input", {})
-            return call_id, func_name, func_args
+    def _parse_native_tool_call_fixed(self, tool_call):
+        if isinstance(tool_call, dict):
+            # Case 1 — raw Bedrock toolUse block (no "function" wrapper)
+            if "input" in tool_call and "function" not in tool_call:
+                from crewai.utilities.agent_utils import sanitize_tool_name
+                call_id = (
+                    tool_call.get("id")
+                    or tool_call.get("toolUseId")
+                    or f"call_{id(tool_call)}"
+                )
+                func_name = sanitize_tool_name(tool_call.get("name", ""))
+                func_args = tool_call.get("input", {})
+                return call_id, func_name, func_args
 
-        # Case 2 — "function" wrapper present but name/arguments wrapped in extra single-quotes
-        if "function" in tool_call:
-            func = tool_call["function"]
-            if isinstance(func, dict):
-                if isinstance(func.get("name"), str):
-                    func["name"] = _strip_bedrock_quotes(func["name"])
-                if isinstance(func.get("arguments"), str):
-                    func["arguments"] = _strip_bedrock_quotes(func["arguments"])
+            # Case 2 — "function" wrapper present but name/arguments wrapped in extra single-quotes
+            if "function" in tool_call:
+                func = tool_call["function"]
+                if isinstance(func, dict):
+                    if isinstance(func.get("name"), str):
+                        func["name"] = _strip_bedrock_quotes(func["name"])
+                    if isinstance(func.get("arguments"), str):
+                        func["arguments"] = _strip_bedrock_quotes(func["arguments"])
 
-    return _orig_parse(self, tool_call)
+        return _orig_parse(self, tool_call)
 
-CrewAgentExecutor._parse_native_tool_call = _parse_native_tool_call_fixed
+    CrewAgentExecutor._parse_native_tool_call = _parse_native_tool_call_fixed

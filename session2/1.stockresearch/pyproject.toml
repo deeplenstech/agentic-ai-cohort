@@ -19,7 +19,6 @@ dependencies = [
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
     "opentelemetry-sdk",
-    "aws-opentelemetry-distro==0.14.2",
 ]
 
 [project.scripts]

@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 load_dotenv()
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 
+import logging
+logging.getLogger("opentelemetry.sdk._shared_internal").setLevel(logging.CRITICAL)
+
 # Set up OTEL -> Langfuse exporter BEFORE crewai imports
 langfuse_public_key = os.environ["LANGFUSE_PUBLIC_KEY"]
 langfuse_secret_key = os.environ["LANGFUSE_SECRET_KEY"]
@@ -21,7 +24,8 @@ from opentelemetry import trace as otel_trace
 
 exporter = OTLPSpanExporter(
     endpoint=f"{langfuse_host}/api/public/otel/v1/traces",
-    headers={"Authorization": f"Basic {auth_header}"}
+    headers={"Authorization": f"Basic {auth_header}"},
+    timeout=5,
 )
 provider = TracerProvider()
 provider.add_span_processor(BatchSpanProcessor(exporter))
@@ -57,7 +61,10 @@ async def main():
             span.record_exception(e)
             raise Exception(f"An error occurred while running the crew: {e}")
         finally:
-            provider.force_flush()
+            try:
+                provider.force_flush(timeout_millis=5000)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

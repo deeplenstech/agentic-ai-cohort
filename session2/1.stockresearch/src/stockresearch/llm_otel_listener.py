@@ -50,32 +50,37 @@ class LLMOtelListener(BaseEventListener):
         _tracer = otel_trace.get_tracer("crewai.llm")
         _active_spans: dict = {}
 
+        def _event_key(event) -> str:
+            call_id = getattr(event, "call_id", None)
+            if call_id:
+                return call_id
+            return f"{event.source_fingerprint}:{getattr(event, 'task_id', '')}"
+
         @bus.on(LLMCallStartedEvent)
         def on_llm_start(source, event: LLMCallStartedEvent):
-            # Capture current OTEL context so the span nests under the active
-            # agent span. No attach/detach needed — avoids cross-thread errors.
             span = _tracer.start_span(f"llm.{event.model}", context=get_current())
             _set_event_attrs(span, event)
             span.set_attribute(_OBSERVATION_TYPE, "generation")
             span.set_attribute(_OBSERVATION_MODEL, event.model)
             if event.messages:
                 span.set_attribute(_OBSERVATION_INPUT, json.dumps(event.messages, default=str))
-            _active_spans[event.call_id] = span
+            _active_spans[_event_key(event)] = span
 
         @bus.on(LLMCallCompletedEvent)
         def on_llm_complete(source, event: LLMCallCompletedEvent):
-            span = _active_spans.pop(event.call_id, None)
+            span = _active_spans.pop(_event_key(event), None)
             if span:
                 _set_event_attrs(span, event)
                 if event.response:
                     span.set_attribute(_OBSERVATION_OUTPUT, json.dumps(event.response, default=str))
-                if event.usage:
-                    span.set_attribute(_OBSERVATION_USAGE, json.dumps(event.usage))
+                usage = getattr(event, "usage", None)
+                if usage:
+                    span.set_attribute(_OBSERVATION_USAGE, json.dumps(usage))
                 span.end()
 
         @bus.on(LLMCallFailedEvent)
         def on_llm_fail(source, event: LLMCallFailedEvent):
-            span = _active_spans.pop(event.call_id, None)
+            span = _active_spans.pop(_event_key(event), None)
             if span:
                 _set_event_attrs(span, event)
                 span.end()
