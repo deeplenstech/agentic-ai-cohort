@@ -4,7 +4,9 @@
 
 Welcome to the Stockresearch Crew project, powered by [crewAI](https://crewai.com). 
 
-This project uses a single-agent AI crew to automate stock research. Given a stock ticker or company name, the crew researches the company, analyzes relevant financial and market data, and produces a structured research report. It is intended as a starting point for building AI-powered investment research workflows using crewAI.
+This project automates stock research using crewAI. Given a stock ticker or company name, the crew researches the company, analyzes relevant financial and market data, and produces a structured research report.
+
+Three crew configurations are included — a single-agent crew, a multi-agent crew, and a multi-agent crew with planning — making it a practical starting point for exploring different crewAI orchestration patterns in an investment research context.
 
 
 ## Installation
