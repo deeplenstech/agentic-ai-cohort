@@ -27,7 +27,7 @@ Build, test, and evaluate an AWS Bedrock Knowledge Base backed by a vector store
 
 ## Step 2: Create the Knowledge Base in AWS Bedrock
 
-Navigate to **AWS Bedrock → Knowledge Bases → Create Knowledge Base**. You will configure a knowledge base backed by a new S3 vector store.
+Navigate to **AWS Bedrock → Knowledge Bases → Create → Knowledge Base with vector store**. You will configure a knowledge base backed by a new S3 vector store.
 
 ### 2a. General Settings
 
@@ -38,10 +38,16 @@ Navigate to **AWS Bedrock → Knowledge Bases → Create Knowledge Base**. You w
 
 ### 2b. Configure the Data Source
 
-- Select **Amazon S3** as the data source.
+- Select **Amazon S3** as the data source and click on Next.
 - Select the S3 bucket you created, then select the specific folder (e.g., `employee-handbook/`) that contains `employee_handbook.pdf`.
 
-### 2c. Chunking Strategy — Semantic Chunking
+### 2c. Parsing Strategy
+
+When configuring the data source, set the parser to **Amazon Bedrock Data Automation**. This parser uses AI to intelligently extract text from PDFs, including complex layouts, tables, and multi-column formats — resulting in cleaner input for chunking and embeddings compared to the default parser.
+
+**AWS Docs:** [Parsing options for knowledge bases](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-advanced-parsing.html)
+
+### 2d. Chunking Strategy — Semantic Chunking
 
 When prompted for chunking strategy, select **Semantic chunking**.
 
@@ -49,7 +55,7 @@ Semantic chunking groups text into chunks based on meaning rather than fixed tok
 
 **AWS Docs:** [Chunking strategies for knowledge bases](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-chunking-parsing.html)
 
-### 2d. Embedding Model
+### 2e. Embedding Model
 
 Choose an embedding model from the list. Recommended options available in Bedrock:
 
@@ -63,7 +69,7 @@ Select whichever you prefer. The embedding model converts text chunks into vecto
 
 **AWS Docs:** [Supported embedding models](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base-supported.html)
 
-### 2e. Vector Store — New S3 Vector Store
+### 2f. Vector Store — New S3 Vector Store
 
 For the destination vector store, select **Amazon S3 vectors** (or "New vector store in S3"). This keeps the setup entirely within AWS without requiring an external vector database.
 
@@ -77,9 +83,9 @@ Confirm and create the knowledge base.
 
 After the knowledge base is created, it will not contain any data until you synchronize.
 
-1. In the knowledge base detail page, go to the **Data sources** tab.
+1. In the knowledge base detail page, go to the **Data source** tab.
 2. Select your S3 data source and click **Sync**.
-3. Wait for the sync job to complete (status will change to `Ready`).
+3. Wait for the sync job to complete (status will change to `Available`).
 
 During synchronization, Bedrock reads the PDF, parses it, applies semantic chunking, generates embeddings via your chosen model, and writes the resulting vectors into the S3 vector store.
 
@@ -89,11 +95,11 @@ During synchronization, Bedrock reads the PDF, parses it, applies semantic chunk
 
 ## Step 4: Test the Knowledge Base
 
-On the knowledge base detail page, use the **Test** button on the right.
+On the knowledge base detail page, use the **Test Knowledge Base** button on the right.
 
 ### Retrieval Only
 
-Switch the mode to **Retrieve** and enter a query, for example:
+Switch the mode to **Retrieval only** and enter a query, for example:
 
 > How many casual leave days does DeepLens provide?
 
@@ -101,7 +107,7 @@ You should see ranked text chunks returned from the vector store — these are t
 
 ### Retrieval + Generation
 
-Switch the mode to **Retrieve and Generate**. Select a foundation model (e.g., `Claude 3 Sonnet` or `Claude 3 Haiku`) to generate a grounded answer from the retrieved passages.
+Switch the mode to **Retrieval and response generation**. Select a foundation model (e.g., `Claude 3 Sonnet` or `Claude 3 Haiku`) to generate a grounded answer from the retrieved passages.
 
 This is the full RAG (Retrieval-Augmented Generation) flow. Notice how the answer is grounded in the source document.
 
@@ -126,13 +132,13 @@ This is the full RAG (Retrieval-Augmented Generation) flow. Notice how the answe
 
 ### Running the Evaluation
 
-1. In the left navigation pane, under **Inference and assessment**, select **Evaluations**.
+1. In the left navigation pane, under **Assess**, select **Evaluations**.
 2. In the **RAG evaluations** pane, choose **Create**.
 3. Enter a name for the evaluation job and select an **evaluator model** (e.g., `Claude 3.5 Sonnet` or `Amazon Nova Pro`).
 4. Under **Inference source**, choose **Bedrock Knowledge Base** and select the knowledge base you just created.
 5. Set **Evaluation type** to **Retrieval and response generation**.
-6. Upload `eval_data_set.jsonl` as the prompt dataset (or provide its S3 path).
-7. Select metrics from the table below.
+6. Select metrics from the table below.
+7. Select the S3 path where you have already uploaded `eval_data_set.jsonl` as the prompt dataset.
 8. Specify an S3 location for results, then submit.
 
 **Retrieve-and-generate metrics** (select those relevant to your use case):
@@ -155,7 +161,6 @@ This is the full RAG (Retrieval-Augmented Generation) flow. Notice how the answe
 
 If scores are low, consider these adjustments:
 
-- **Low retrieval precision** → The chunks being retrieved are not relevant. Try adjusting the number of results returned (`numberOfResults`) or switching chunking strategy.
 - **Low faithfulness** → The model is hallucinating beyond what was retrieved. Try a more instruction-following model or add a system prompt that restricts it to the retrieved context.
 - **Low correctness/completeness** → The handbook text itself may be ambiguous (recall it was ChatGPT-generated). You can add a custom prompt or update the source document and re-sync.
 
