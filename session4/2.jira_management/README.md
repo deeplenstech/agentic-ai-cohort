@@ -1,4 +1,4 @@
-# Jira Management Crew
+# Assignment 2: Jira Management Crew
 
 ## Purpose
 
@@ -57,7 +57,7 @@ ATLASSIAN_API_KEY=your_atlassian_api_token
 
 To get your Atlassian API token:
 1. Log in at [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens)
-2. Click **Create API token**, give it a name, and copy the token
+2. Click **Create API token with Scope**, give it a name, and copy the token
 
 **Langfuse** — used for tracing and observability:
 
@@ -77,10 +77,9 @@ To get your Langfuse keys:
 ```python
 inputs = {
     'jira_request': (
-        "I have a todo app. Based on the requirements document below create an epic and tasks "
-        "in the project with the ID 'SCRUM'. Tasks should be created in the new epic created. "
-        "Task dependencies should be effectively covered. Epic and task details should also be provided.\n"
-        "https://your-confluence-page-url"
+        "I have a todo app. Based on the requirements confluence page create one epic in the project with the ID 'TIME' in the cloud ID: 'https://deeplenstech.atlassian.net'. Based on the requirements confluence page, also create tasks with the parent as the newly created epic. Task dependencies should be effectively set after the tasks have been created. Epic requirements confluence page: \n"
+        "https://deeplenstech.atlassian.net/wiki/spaces/~557058fd5ab0b1dd344900a0675e1db1567b47/pages/360449/Reminder+feature+in+my+ToDo+app \n"
+        "After you are done with the changes, update the confluence page and add a section containing a table of newly created jira issues along with their summary"
     )
 }
 ```

@@ -9,3 +9,4 @@ Each session has its own folder with pre-requisites, assignments, and projects. 
 - [Session 1](session1/README.md)
 - [Session 2](session2/README.md)
 - [Session 3](session3/README.md)
+- [Session 4](session4/README.md)
