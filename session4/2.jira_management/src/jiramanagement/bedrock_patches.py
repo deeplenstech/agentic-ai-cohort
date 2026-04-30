@@ -5,6 +5,7 @@ Import this module once before any CrewAI code runs to apply all patches.
 """
 from crewai.agents.crew_agent_executor import CrewAgentExecutor
 from crewai.llms.providers.bedrock.completion import BedrockCompletion
+from crewai_tools.adapters.mcp_adapter import CrewAIToolAdapter
 
 
 # ── Patch 1 ──────────────────────────────────────────────────────────────────
@@ -67,3 +68,18 @@ if hasattr(CrewAgentExecutor, "_parse_native_tool_call"):
         return _orig_parse(self, tool_call)
 
     CrewAgentExecutor._parse_native_tool_call = _parse_native_tool_call_fixed
+
+
+# ── Patch 3 ──────────────────────────────────────────────────────────────────
+# crewai's create_model_from_schema sets default=None for every optional field.
+# When the LLM omits those fields, Pydantic fills them in as None, and they get
+# forwarded to the MCP server as explicit null values — causing schema validation
+# errors on tools like createJiraIssue. Strip None values before the MCP call.
+_orig_adapt = CrewAIToolAdapter.adapt
+
+def _adapt_with_null_filter(self, func, mcp_tool):
+    def filtered_func(kwargs):
+        return func({k: v for k, v in (kwargs or {}).items() if v is not None})
+    return _orig_adapt(self, filtered_func, mcp_tool)
+
+CrewAIToolAdapter.adapt = _adapt_with_null_filter

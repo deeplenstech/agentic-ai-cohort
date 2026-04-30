@@ -50,11 +50,14 @@ async def main():
     tracer = otel_trace.get_tracer("jira_management")
     inputs = {
         'jira_request': (
-            "I have a todo app. Based on the requirements confluence page create an epic and tasks "
-            "in the project with the ID 'SCRUM'. Tasks should be created in the new epic created. "
-            "Task dependencies should be effectively covered. Epic and task details should also be provided.\n"
+            "I have a todo app. Based on the requirements confluence page create one epic "
+            "in the project with the ID 'TIME' in the cloud ID: 'https://deeplenstech.atlassian.net'. "
+            "Based on the requirements confluence page, also create tasks with the parent as the newly created epic. "
+            "Task dependencies should be effectively set after the tasks have been created. "
             "Epic requirements confluence page: "
-            "https://deeplenstech.atlassian.net/wiki/spaces/~557058fd5ab0b1dd344900a0675e1db1567b47/pages/360449/Reminder+feature+in+my+ToDo+app"
+            "https://deeplenstech.atlassian.net/wiki/spaces/~557058fd5ab0b1dd344900a0675e1db1567b47/pages/360449/Reminder+feature+in+my+ToDo+app \n"
+            "After you are done with the changes, update the confluence page and add a section containing "
+            "a table of newly created jira issues along with their summary"
         )
     }
 

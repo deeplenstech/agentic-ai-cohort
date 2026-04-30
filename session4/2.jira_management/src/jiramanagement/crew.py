@@ -21,8 +21,6 @@ def create_crew():
     all_tools = MCPServerAdapter(server_params).tools
     llm = LLM(model=os.environ["LARGE_MODEL_ID"])
 
-
-
     confluence_reader = Agent(
         role="Confluence Reader",
         goal="Read and extract structured information from Confluence pages and spaces.",
@@ -41,6 +39,29 @@ def create_crew():
             "get_confluence_spaces",
             "get_pages_in_confluence_space",
             "search_confluence_using_cql",
+            "get_accessible_atlassian_resources"
+        }),
+        allow_delegation=False,
+    )
+
+    confluence_manager = Agent(
+        role="Confluence Manager",
+        goal="Create and update Confluence pages and add comments to existing pages.",
+        backstory=(
+            "You are a specialist in writing and maintaining Confluence content. You create new pages "
+            "with well-structured content, update existing pages while preserving their version history, "
+            "and add footer or inline comments to pages. You always fetch the current page details before "
+            "updating to ensure you work with the latest version number."
+        ),
+        llm=llm,
+        tools=_filter_tools(all_tools, {
+            "create_confluence_page",
+            "update_confluence_page",
+            "create_confluence_footer_comment",
+            "create_confluence_inline_comment",
+            "get_confluence_page",
+            "get_confluence_spaces",
+            "get_accessible_atlassian_resources"
         }),
         allow_delegation=False,
     )
@@ -60,64 +81,40 @@ def create_crew():
             "get_visible_jira_projects",
             "get_jira_project_issue_types_metadata",
             "get_jira_issue_type_meta_with_fields",
+            "get_accessible_atlassian_resources"
         }),
         allow_delegation=False,
     )
 
-    jira_issue_creator = Agent(
-        role="Jira Issue Creator",
-        goal="Create new Jira issues including epics, stories, tasks, and sub-tasks with correct fields and dependency links.",
+    jira_issue_manager = Agent(
+        role="Jira Issue Manager",
+        goal=(
+            "Create, update, and cancel Jira issues including epics, stories, tasks, and sub-tasks "
+            "with correct fields, dependency links, status transitions, comments, and worklogs."
+        ),
         backstory=(
-            "You are an expert at creating well-structured Jira issues with the correct issue types, "
-            "project metadata, and inter-issue dependency links."
+            "You are an expert at the full lifecycle of Jira issues. You create well-structured issues "
+            "with the correct issue types, project metadata, and inter-issue dependency links. You also "
+            "modify existing issues by editing fields, transitioning them through workflows, and adding "
+            "comments and worklogs. When an issue needs to be removed, you transition it to its Cancelled "
+            "or Done state since the MCP server does not expose a direct delete API."
         ),
         llm=llm,
         tools=_filter_tools(all_tools, {
             "create_jira_issue",
-            "create_issue_link",
-            "get_visible_jira_projects",
-            "get_jira_project_issue_types_metadata",
-            "get_jira_issue_type_meta_with_fields",
-            "get_issue_link_types",
-            "lookup_jira_account_id",
-        }),
-        allow_delegation=False,
-    )
-
-    jira_issue_updater = Agent(
-        role="Jira Issue Updater",
-        goal="Update existing Jira issues by editing fields, transitioning status, and adding comments.",
-        backstory=(
-            "You are an expert at modifying Jira issues, transitioning them through workflows, "
-            "and adding structured comments and worklogs."
-        ),
-        llm=llm,
-        tools=_filter_tools(all_tools, {
             "edit_jira_issue",
+            "create_issue_link",
+            "get_issue_link_types",
             "transition_jira_issue",
             "get_transitions_for_jira_issue",
             "add_comment_to_jira_issue",
             "add_worklog_to_jira_issue",
+            "get_jira_issue",
+            "get_visible_jira_projects",
+            "get_jira_project_issue_types_metadata",
             "get_jira_issue_type_meta_with_fields",
             "lookup_jira_account_id",
-        }),
-        allow_delegation=False,
-    )
-
-    # The Atlassian MCP server does not expose a deleteJiraIssue tool.
-    # This agent transitions issues to their terminal state (Cancelled/Done) as the closest equivalent.
-    jira_issue_deleter = Agent(
-        role="Jira Issue Deleter",
-        goal="Cancel or close Jira issues by transitioning them to a terminal workflow state.",
-        backstory=(
-            "You handle removal of Jira issues. Since the MCP server does not expose a direct "
-            "delete API, you transition issues to their Cancelled or Done state to effectively retire them."
-        ),
-        llm=llm,
-        tools=_filter_tools(all_tools, {
-            "get_jira_issue",
-            "get_transitions_for_jira_issue",
-            "transition_jira_issue",
+            "get_accessible_atlassian_resources"
         }),
         allow_delegation=False,
     )
@@ -138,10 +135,9 @@ def create_crew():
             "updating, and cancelling work to the appropriate specialised sub-agents.\n\n"
             "Available coworkers (use the exact role name when delegating):\n"
             "- 'Confluence Reader': reads Confluence pages, spaces, and search results\n"
+            "- 'Confluence Manager': creates new Confluence pages, updates existing pages, and adds comments\n"
             "- 'Jira Issue Reader': reads and searches Jira issues via JQL\n"
-            "- 'Jira Issue Creator': creates new epics, stories, tasks, sub-tasks, and issue links\n"
-            "- 'Jira Issue Updater': edits fields, transitions status, and adds comments to issues\n"
-            "- 'Jira Issue Deleter': cancels or closes issues by transitioning to a terminal state\n\n"
+            "- 'Jira Issue Manager': creates, updates, and cancels epics, stories, tasks, sub-tasks, and issue links\n\n"
             "When using the 'Delegate work to coworker' or 'Ask question to coworker' tools you MUST "
             "always provide all three required arguments: coworker (exact role name from the list above), "
             "task or question (a clear and specific request), and context (all background info the "
@@ -164,7 +160,7 @@ def create_crew():
             "- Provide a clear summary of all created items with their IDs and relationships."
         ),
         expected_output=(
-            "A structured summary of all Jira items created, including:\n"
+            "A structured summary of all Jira items created or updated, including:\n"
             "- Epic: ID, summary, description\n"
             "- Tasks: ID, summary, type, dependencies\n"
             "- Any design or security review tasks added for enhancements"
@@ -172,7 +168,7 @@ def create_crew():
     )
 
     return Crew(
-        agents=[confluence_reader, jira_issue_reader, jira_issue_creator, jira_issue_updater, jira_issue_deleter],
+        agents=[confluence_reader, confluence_manager, jira_issue_reader, jira_issue_manager],
         tasks=[jira_task],
         manager_agent=jira_manager,
         process=Process.hierarchical,
