@@ -43,7 +43,7 @@ Configure the following keys in your `.env` file:
 **Model** — the Bedrock model used by the Jira Project Manager agent:
 
 ```env
-LARGE_MODEL_ID=bedrock/us.anthropic.claude-sonnet-4-6
+LARGE_MODEL_ID=bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
 ```
 
 Your AWS credentials must be configured (via `~/.aws/credentials`, IAM role, or environment variables) with permissions to invoke the Bedrock model.
