@@ -13,7 +13,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src'
 
 from employee_chatbot.crew import createCrew
 from employee_chatbot.utils.memory import MemoryUtils
-from deepeval.dataset import EvaluationDataset, Golden
+from deepeval.dataset import EvaluationDataset, Golden, ConversationalGolden
+from utils.tool_tracker import ToolCallTracker
 
 def generate_and_push_dataset():
     console = Console()
@@ -35,20 +36,25 @@ def generate_and_push_dataset():
             'employee_query': query,
             'employee_id': str(uuid.uuid4()),
             'conversationHistory': "",
-            'userPreferences': ""
+            'conversationSummary': ""
         }
         
         try:
             crew = createCrew()
-            # Execute the crew to capture its actual output as our golden baseline
-            response = crew.kickoff(inputs=inputs).raw
-            
+            # ToolCallTracker records which tools the agent calls during this
+            # run. Those names become the ground-truth expected_tools for this
+            # golden, enabling trajectory evaluation in the test suite.
+            with ToolCallTracker() as tracker:
+                response = crew.kickoff(inputs=inputs).raw
+
             console.print(f"[bold green]Baseline Response Captured:[/bold green]\n{response}")
-            
-            # Create a Golden object
+            console.print(f"[bold yellow]Tools called:[/bold yellow] {tracker.tool_names}")
+
+            # Create a Golden object with expected_tools baked in
             golden = Golden(
                 input=query,
-                expected_output=response
+                expected_output=response,
+                expected_tools = tracker.tool_calls
             )
             goldens.append(golden)
             
@@ -69,5 +75,18 @@ def generate_and_push_dataset():
     except Exception as e:
         console.print(f"[bold red]Failed to push dataset to Confident AI: {e}[/bold red]")
 
+def generate_and_push_multi_turn_dataset():
+    goldens = [
+        ConversationalGolden(
+            scenario="Manpreet wants to go for a long vacation starting from the first working day of the coming month and wants to apply earned leave for the same. Manpreet's leave is already approved. This multi-turn interaction will be turn by turn. In the first turn, Manpreet wants to first check how many earned leaves are possible in a calendar year. And then in the second turn, Manpreet wants to check how many earned leaves he has taken in this calendar year. And then in the last turn Manpreet wants to apply for remaining possible earned leaves. While applying leaves, Manpreet wants to ignore Saturdays and Sundays before applying leaves. And hence multiple applications of earned leave might need to be submitted.",
+            expected_outcome="Maximum earned leaves submitted into the system.",
+            user_description="Manpreet is an employee of DeepLens."
+        )
+    ]
+    # Create dataset and optionally push to Confident AI
+    dataset = EvaluationDataset(goldens=goldens)
+    dataset.push(alias="Employee Chatbot Multi Turn Goldens")
+
 if __name__ == "__main__":
     generate_and_push_dataset()
+    generate_and_push_multi_turn_dataset()

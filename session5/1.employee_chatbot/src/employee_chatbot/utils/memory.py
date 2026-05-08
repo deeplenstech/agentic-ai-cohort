@@ -43,25 +43,21 @@ class MemoryUtils:
             response += item['role'] + ": " + item['content']['text'] + "\n"
         return response
 
-    def extractPreferences(self) -> str:
-        namespace = "/strategies/{memoryStrategyId}/actors/{actorId}".format(memoryStrategyId=os.getenv("MEMORY_PREF_STRATEGY_ID"), actorId=self.actorId)
+    def extractSummary(self) -> str:
+        namespace = "/strategies/{memoryStrategyId}/actors/{actorId}/sessions/{sessionId}".format(memoryStrategyId=os.getenv("MEMORY_SUMMARY_STRATEGY_ID"), actorId=self.actorId, sessionId=self.sessionId)
         params = {
             "memory_id": os.getenv("MEMORY_ID"),
             "namespace": namespace,
-            "query": "User Preferences",
+            "query": "Conversation Summary",
             "actor_id": self.actorId
         }
         memory_records = MemoryClient().retrieve_memories(**params)
         
-        preferences:List[str] = []
+        summary:List[str] = []
         for item in memory_records:
             if item['content'] and item['content']['text']:
-                try:
-                    contentJSON = json.loads(item['content']['text'])
-                    preferences.append(contentJSON['preference'])
-                except Exception as e:
-                    print (f"An error occurred while reading the memory JSON: {e}")
-        response = ". ".join(preferences)
+                summary.append(item['content']['text'])
+        response = ". ".join(summary)
         return response
         
 

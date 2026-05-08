@@ -14,7 +14,7 @@ def createCrew():
             "pertaining to employee policies. You also seamlessly handle leave applications, inserting them into "
             "the database, and can quickly pull up records of how many leaves an employee has already taken."
         ),
-        llm=LLM(model=os.environ["LARGE_MODEL_ID"]),
+        llm=LLM(model=os.environ["LARGE_MODEL_ID"], temperature=0),
         tools=[
             kb_tool,
             insert_leave,
@@ -39,7 +39,7 @@ def createCrew():
             "Always be polite and concise. \n\n"
             "EMPLOYEE_QUERY: {employee_query} \n\n"
             "CONVERSATION_HISTORY: {conversationHistory} \n\n"
-            "USER_PREFERENCES: {userPreferences} \n\n"
+            "CONVERSATION_SUMMARY: {conversationSummary} \n\n"
         ),
         expected_output=(
             "An concise answer to the employee query in plain text. The response should be "
