@@ -84,7 +84,7 @@ Configure the chatbot to use **Amazon Bedrock AgentCore** for persistent convers
 
 ---
 
-## Assignment 2: Configure and Run Employee Chatbot
+## Assignment 2: Online Evaluation
 
 ### Goal
 Configure the chatbot, interact with it across multiple turns, and observe the live traces and online evaluations in Confident AI.
