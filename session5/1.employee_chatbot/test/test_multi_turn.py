@@ -32,7 +32,7 @@ def model_callback(input, turns: List[Turn], thread_id: str) -> Turn:
         # 2. Call chatbot
         memoryUtils = MemoryUtils(sessionId=session_id, actorId=employee_id)
 
-        conversationHistory = memoryUtils.loadShortTermMemory(5)
+        conversationHistory = memoryUtils.loadShortTermMemory()
         conversationSummary = memoryUtils.extractSummary()
 
         inputs = {

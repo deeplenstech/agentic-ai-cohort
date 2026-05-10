@@ -15,6 +15,17 @@ from employee_chatbot.crew import createCrew
 from employee_chatbot.utils.memory import MemoryUtils
 from deepeval.dataset import EvaluationDataset, Golden, ConversationalGolden
 from utils.tool_tracker import ToolCallTracker
+from deepeval.metrics import (
+        TaskCompletionMetric, 
+        AnswerRelevancyMetric,
+        ToxicityMetric,
+        StepEfficiencyMetric,
+        TurnRelevancyMetric,
+        GoalAccuracyMetric,
+        ConversationCompletenessMetric
+    )
+from deepeval.test_case import LLMTestCaseParams
+from deepeval.metrics import MetricSet
 
 def generate_and_push_dataset():
     console = Console()

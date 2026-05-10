@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import warnings
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,10 +16,8 @@ from deepeval.tracing import trace, update_current_trace, evaluate_thread
 from deepeval.metrics import BaseMetric
 from deepeval.metrics import TaskCompletionMetric
 from deepeval.metrics import StepEfficiencyMetric
-from .deepeval_patch import apply_deepeval_patch
 
 instrument_crewai()
-apply_deepeval_patch()
 
 def run():
     console = Console()
@@ -33,15 +32,26 @@ def run():
             console.print("[bold green]Chatbot:[/bold green] Goodbye!")
             # Trigger thread-level evaluation on exit
             # Ensure you have created a Multi-turn Metric Collection in Confident AI
-            evaluate_thread(
-                thread_id=session_id, 
-                metric_collection="employee_chatbot_multi_turn" 
-            )
+            metric_collection = os.getenv("DEEPEVAL_THREAD_METRIC_COLLECTION")
+            eval_kwargs = {"thread_id": session_id}
+            if metric_collection:
+                eval_kwargs["metric_collection"] = metric_collection
+            evaluate_thread(**eval_kwargs)
             break
 
         try:
-            with trace(thread_id=session_id, user_id=employee_id, input=query, name="Employee Chatbot Interaction", metric_collection="employee_chatbot"):
-                conversationHistory = memoryUtils.loadShortTermMemory(5)
+            trace_kwargs = {
+                "thread_id": session_id,
+                "user_id": employee_id,
+                "input": query,
+                "name": "Employee Chatbot Interaction"
+            }
+            trace_metric_collection = os.getenv("DEEPEVAL_TRACE_METRIC_COLLECTION")
+            if trace_metric_collection:
+                trace_kwargs["metric_collection"] = trace_metric_collection
+
+            with trace(**trace_kwargs):
+                conversationHistory = memoryUtils.loadShortTermMemory()
                 conversationSummary = memoryUtils.extractSummary()
                 inputs = {
                     'employee_query': query,

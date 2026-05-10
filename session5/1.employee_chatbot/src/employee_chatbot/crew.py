@@ -3,9 +3,21 @@ from crewai import Agent, Crew, Task, LLM
 from . import bedrock_patches  # noqa: F401 — applies Bedrock monkey-patches on import
 from .tools import insert_leave, read_leaves, get_current_date
 from crewai_tools import BedrockKBRetrieverTool
+from deepeval.metrics import GEval
+from deepeval.test_case import LLMTestCaseParams
+
+knowledge_completeness_metric = GEval(
+    name="Knowledge Based Completeness",
+    criteria="Determine if the retrieved context is complete and contains all necessary information to answer the user's query.",
+    evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+    threshold=0.5
+)
 
 def createCrew():
     kb_tool = BedrockKBRetrieverTool(knowledge_base_id=os.environ["BEDROCK_KB_ID"])
+    # Surgical injection to bypass Pydantic and enable tracing
+    object.__setattr__(kb_tool, "metrics", [knowledge_completeness_metric])
+    
     employee_query_agent = Agent(
         role="HR & Leave Manager",
         goal="Answer queries on company policies, accept leave requests from employees, and provide information on leaves availed.",
