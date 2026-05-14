@@ -33,17 +33,28 @@ cp .env.template .env
 
 Then configure the following keys in your `.env` file:
 
-**Model setup** — set `LARGE_MODEL_ID` to the model you want to use, and provide the corresponding API key:
+**Model setup** — set `MODEL_ID` to the model you want to use, and provide the corresponding API key (in case you are not using AWS Bedrock hosted models).
 
 ```env
+# Example: AWS Bedrock
+MODEL_ID=bedrock/us.anthropic.claude-sonnet-4-6
+
 # Example: Anthropic
-LARGE_MODEL_ID=anthropic/claude-sonnet-4-6
+MODEL_ID=anthropic/claude-sonnet-4-6
 ANTHROPIC_API_KEY=your_anthropic_api_key
 
 # Example: OpenAI
-LARGE_MODEL_ID=openai/gpt-4o
+MODEL_ID=openai/gpt-4o
 OPENAI_API_KEY=your_openai_api_key
 ```
+
+If you are using AWS Bedrock hosted models, you need to install and configure the AWS CLI by following the [official AWS CLI installation guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html). Once installed, run:
+
+```bash
+aws configure
+```
+
+You'll be prompted for your AWS Access Key ID, Secret Access Key, default region (`us-east-1`), and output format (`json`).
 
 **Tavily** — used by agents to search the web and extract URL content:
 
@@ -58,7 +69,7 @@ Get a free Tavily key at [tavily.com](https://tavily.com).
 ```env
 LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
 LANGFUSE_SECRET_KEY=your_langfuse_secret_key
-LANGFUSE_HOST=https://cloud.langfuse.com
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
 To get your Langfuse keys:

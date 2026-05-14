@@ -134,7 +134,7 @@ This is the full RAG (Retrieval-Augmented Generation) flow. Notice how the answe
 
 1. In the left navigation pane, under **Assess**, select **Evaluations**.
 2. In the **RAG evaluations** pane, choose **Create**.
-3. Enter a name for the evaluation job and select an **evaluator model** (e.g., `Claude 3.5 Sonnet` or `Amazon Nova Pro`).
+3. Enter a name for the evaluation job and select an **evaluator model** (e.g., `Claude 4.6 Sonnet` or `Amazon Nova Pro`).
 4. Under **Inference source**, choose **Bedrock Knowledge Base** and select the knowledge base you just created.
 5. Set **Evaluation type** to **Retrieval and response generation**.
 6. Select metrics from the table below.

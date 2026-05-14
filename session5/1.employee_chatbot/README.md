@@ -45,7 +45,7 @@ cp .env.template .env
 
 | Variable | Description |
 | :--- | :--- |
-| `LARGE_MODEL_ID` | The Bedrock model ID (e.g., `bedrock/us.anthropic.claude-3-5-sonnet-20240620-v1:0`). |
+| `MODEL_ID` | The Bedrock model ID (e.g., `bedrock/us.anthropic.claude-sonnet-4-6`). |
 | `BEDROCK_KB_ID` | The ID of your Amazon Bedrock Knowledge Base (setup similarly to Session 3 assignments). |
 | `CONFIDENT_API_KEY` | Your API key from [Confident AI](https://www.confident-ai.com/) (ensure it's for a specific project). |
 | `OPENAI_API_KEY` | Required by DeepEval for running certain metrics (GEval, etc.). |

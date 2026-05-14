@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 # Set up OTEL -> Langfuse exporter BEFORE crewai imports
 langfuse_public_key = os.environ["LANGFUSE_PUBLIC_KEY"]
 langfuse_secret_key = os.environ["LANGFUSE_SECRET_KEY"]
-langfuse_host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com")
+langfuse_host = os.environ.get("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
 auth_header = base64.b64encode(f"{langfuse_public_key}:{langfuse_secret_key}".encode()).decode()
 
 from opentelemetry.sdk.trace import TracerProvider

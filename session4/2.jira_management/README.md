@@ -43,7 +43,7 @@ Configure the following keys in your `.env` file:
 **Model** — the Bedrock model used by the Jira Project Manager agent:
 
 ```env
-LARGE_MODEL_ID=bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
+MODEL_ID=bedrock/us.anthropic.claude-sonnet-4-6
 ```
 
 Your AWS credentials must be configured (via `~/.aws/credentials`, IAM role, or environment variables) with permissions to invoke the Bedrock model.
@@ -64,7 +64,7 @@ To get your Atlassian API token:
 ```env
 LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
 LANGFUSE_SECRET_KEY=your_langfuse_secret_key
-LANGFUSE_HOST=https://cloud.langfuse.com
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
 To get your Langfuse keys:

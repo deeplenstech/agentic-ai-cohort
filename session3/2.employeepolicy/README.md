@@ -41,7 +41,7 @@ Configure the following keys in your `.env` file:
 **Model** — the Bedrock model used by the HR Manager agent:
 
 ```env
-LARGE_MODEL_ID=bedrock/us.anthropic.claude-sonnet-4-6
+MODEL_ID=bedrock/us.anthropic.claude-sonnet-4-6
 ```
 
 **Amazon Bedrock Knowledge Base** — the ID of the KB containing the employee handbook:
@@ -57,7 +57,7 @@ Your AWS credentials must be configured in the environment (via `~/.aws/credenti
 ```env
 LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
 LANGFUSE_SECRET_KEY=your_langfuse_secret_key
-LANGFUSE_HOST=https://cloud.langfuse.com
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
 To get your Langfuse keys:

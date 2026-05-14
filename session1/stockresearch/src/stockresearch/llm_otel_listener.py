@@ -14,7 +14,6 @@ _OBSERVATION_TYPE      = "langfuse.observation.type"
 _OBSERVATION_INPUT     = "langfuse.observation.input"
 _OBSERVATION_OUTPUT    = "langfuse.observation.output"
 _OBSERVATION_MODEL     = "langfuse.observation.model.name"
-_OBSERVATION_USAGE     = "langfuse.observation.usage_details"
 
 # Internal event metadata fields — not useful as span attributes
 _SKIP_FIELDS = {
@@ -69,8 +68,6 @@ class LLMOtelListener(BaseEventListener):
                 _set_event_attrs(span, event)
                 if event.response:
                     span.set_attribute(_OBSERVATION_OUTPUT, json.dumps(event.response, default=str))
-                if event.usage:
-                    span.set_attribute(_OBSERVATION_USAGE, json.dumps(event.usage))
                 span.end()
 
         @bus.on(LLMCallFailedEvent)

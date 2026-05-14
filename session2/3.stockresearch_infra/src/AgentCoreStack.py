@@ -226,7 +226,7 @@ class AgentCoreStack(Stack):
                 "OTEL_TRACES_SAMPLER": "always_on",
                 "OTEL_LOG_LEVEL": "debug",
                 "SERPER_API_KEY": _serper_api_key,
-                "LARGE_MODEL_ID": "bedrock/us.anthropic.claude-sonnet-4-6"
+                "MODEL_ID": "bedrock/us.anthropic.claude-sonnet-4-6"
             },
             network_configuration=bedrockagentcore.CfnRuntime.NetworkConfigurationProperty(
                 network_mode="PUBLIC"

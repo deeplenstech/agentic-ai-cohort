@@ -57,7 +57,7 @@ SERPER_API_KEY=your_serper_api_key
 The container is configured to use the following model by default (set in `src/AgentCoreStack.py`):
 
 ```
-LARGE_MODEL_ID=bedrock/us.anthropic.claude-sonnet-4-6
+MODEL_ID=bedrock/us.anthropic.claude-sonnet-4-6
 ```
 
 ## Deploying

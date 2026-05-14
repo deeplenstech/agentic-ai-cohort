@@ -11,7 +11,7 @@ hr_manager = Agent(
         "You're a seasoned HR Manager. Known to politly reply to queries form the employees "
         "pertaining to the employee policies. You are also known to reply concisely."
     ),
-    llm=LLM(model=os.environ["LARGE_MODEL_ID"]),
+    llm=LLM(model=os.environ["MODEL_ID"]),
     tools=[
         BedrockKBRetrieverTool(
             knowledge_base_id=os.environ["BEDROCK_KB_ID"]

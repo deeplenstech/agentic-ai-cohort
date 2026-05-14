@@ -1,7 +1,8 @@
 import os
-from crewai import Agent, Crew, Task, LLM
+from crewai import Agent, Crew, Task
 from crewai_tools import SerperDevTool
 from stockresearch.tools.date_tool import GetCurrentDateTool
+from . import bedrock_patches  # noqa: F401 — applies Bedrock monkey-patches on import
 
 stock_researcher = Agent(
     role="Senior Stock Researcher",

@@ -22,7 +22,7 @@ stock_researcher = Agent(
         "developments on a stock. Known for your ability to find the most relevant "
         "information and present it in a clear and concise manner."
     ),
-    llm=LLM(model=os.environ["LARGE_MODEL_ID"]),
+    llm=LLM(model=os.environ["MODEL_ID"]),
     tools=[GetCurrentDateTool(), SerperDevTool()]
 )
 

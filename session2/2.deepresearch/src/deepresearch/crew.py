@@ -75,7 +75,7 @@ deep_research_planner = Agent(
         "answered independently and then synthesized. You think like an editor commissioning "
         "a cover story: what are the essential angles a reader needs to understand the full picture? "
     ),
-    llm=LLM(model=os.environ["LARGE_MODEL_ID"]),
+    llm=LLM(model=os.environ["MODEL_ID"]),
     tools=[TavilySearchTool()]
 )
 
@@ -97,7 +97,7 @@ researcher_agent = Agent(
         "during this session. You prioritize authoritative sources such as academic papers, "
         "peer-reviewed journals, government reports, and reputable industry publications. "
     ),
-    llm=LLM(model=os.environ["LARGE_MODEL_ID"]),
+    llm=LLM(model=os.environ["MODEL_ID"]),
     tools=[TavilySearchTool(), TavilyExtractorTool()]
 )
 
@@ -116,7 +116,7 @@ writer_agent = Agent(
         "is grounded in sources retrieved from the knowledge base. When critic feedback is "
         "provided, you address every point specifically and improve the article accordingly. "
     ),
-    llm=LLM(model=os.environ["LARGE_MODEL_ID"])
+    llm=LLM(model=os.environ["MODEL_ID"])
 )
 
 critic_agent = Agent(
@@ -135,7 +135,7 @@ critic_agent = Agent(
         "every factual claim with [Source: URL] format. You output blank string only when the "
         "article meets high publication standards. "
     ),
-    llm=LLM(model=os.environ["LARGE_MODEL_ID"]),
+    llm=LLM(model=os.environ["MODEL_ID"]),
     tools=[TavilySearchTool()]
 )
 
@@ -156,7 +156,7 @@ manager_agent = Agent(
         "You are decisive and keep the team focused: you never allow a step to be skipped and "
         "you ensure the critic's feedback is fully acted on before the final article is delivered."
     ),
-    llm=LLM(model=os.environ["LARGE_MODEL_ID"]),
+    llm=LLM(model=os.environ["MODEL_ID"]),
     allow_delegation=True
 )
 

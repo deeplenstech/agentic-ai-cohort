@@ -19,7 +19,7 @@ def create_crew():
     }
 
     all_tools = MCPServerAdapter(server_params).tools
-    llm = LLM(model=os.environ["LARGE_MODEL_ID"])
+    llm = LLM(model=os.environ["MODEL_ID"])
 
     confluence_reader = Agent(
         role="Confluence Reader",
