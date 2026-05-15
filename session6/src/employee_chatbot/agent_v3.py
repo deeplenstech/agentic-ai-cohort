@@ -13,6 +13,10 @@ load_dotenv()
 
 # --- Pydantic Models ---
 
+class RequestIntent(str, Enum):
+    LEAVE_MANAGEMENT = "leave management"
+    POLICY_ACCESS = "policy access"
+
 class LeaveIntent(str, Enum):
     APPLY = "apply"
     FETCH = "fetch"
@@ -23,11 +27,10 @@ class LeaveType(str, Enum):
 
 class LeaveRequest(BaseModel):
     """Specific parameters for leave-related operations."""
-    intent: LeaveIntent = Field(..., description="Whether the user wants to apply for leave or fetch their leave history.")
-    start_date: Optional[str] = Field(None, description="Start date in YYYY-MM-DD format (required for 'apply').")
-    end_date: Optional[str] = Field(None, description="End date in YYYY-MM-DD format (required for 'apply').")
-    leave_type: Optional[LeaveType] = Field(None, description="Type of leave (required for 'apply').")
-    reason: Optional[str] = Field(None, description="Optional reason for the leave request.")
+    leave_intent: LeaveIntent = Field(..., description="Whether the user wants to apply for leave or fetch their leave history.")
+    start_date: Optional[str] = Field(None, description="Start date in YYYY-MM-DD format (required for 'apply' only).")
+    end_date: Optional[str] = Field(None, description="End date in YYYY-MM-DD format (required for 'apply' only).")
+    leave_type: Optional[LeaveType] = Field(None, description="Type of leave (required for 'apply' only).")
 
 class PolicyRequest(BaseModel):
     """Specific parameters for policy-related queries."""
@@ -38,19 +41,9 @@ class RouteResponse(BaseModel):
     Wrapper model for the Router Agent.
     Ensures exclusive routing to either leave management or policy access.
     """
+    intent: RequestIntent = Field(None, description="The intent of the request.")
     leave_request: Optional[LeaveRequest] = Field(None, description="Populated if the request is leave-related.")
     policy_request: Optional[PolicyRequest] = Field(None, description="Populated if the request is policy-related.")
-
-    @model_validator(mode='after')
-    def check_exclusivity(self) -> 'RouteResponse':
-        fields_set = [self.leave_request, self.policy_request]
-        count = sum(1 for field in fields_set if field is not None)
-        if count != 1:
-            raise ValueError(
-                f"Exactly one of 'leave_request' or 'policy_request' must be provided. "
-                f"Found {count} fields set."
-            )
-        return self
 
 # --- Flow State ---
 
@@ -76,14 +69,16 @@ class EmployeeChatbotFlow(Flow[EmployeeFlowState]):
                 "requests to apply for leave, requests to view leave history, and queries about company policies. "
                 "You extract dates and types accurately to ensure downstream agents have clean data."
             ),
-            llm=LLM(model=os.environ["MODEL_ID"], temperature=0),
+            llm=LLM(model=os.environ["MODEL_ID"]),
+            tools=[GetCurrentDateTool()]
         )
         
         router_task = Task(
             description=(
                 "Analyze the following employee query and classify it. \n"
-                "If it's leave-related, specify if they are applying or fetching history, and extract all details. \n"
-                "If it's policy-related, extract the core query for the policy expert. \n\n"
+                "If it is for applying leaves intent will be LEAVE_MANAGEMENT, and leave_intent will be APPLY. You will extract other details like dates and leave type.\n"
+                "If it's for fetching leaves, intent will be LEAVE_MANAGEMENT, and leave_intent will be FETCH. No other details will need to be extracted in that case.\n"
+                "If it's policy-related in general or even related to leave policy, extract the exact query and intent will be POLICY_ACCESS.\n\n"
                 "EMPLOYEE QUERY: {employee_query} \n"
                 "CONVERSATION HISTORY: {conversationHistory}"
             ),
@@ -98,14 +93,15 @@ class EmployeeChatbotFlow(Flow[EmployeeFlowState]):
             "conversationHistory": self.state.conversationHistory
         })
         
+        # print (result.raw)
         self.state.route_data = result.pydantic
         
     @router(classify_and_route)
     def router_logic(self):
         """Decision logic based on the structured output of the Router Agent."""
-        if self.state.route_data.leave_request:
+        if self.state.route_data.intent == RequestIntent.LEAVE_MANAGEMENT:
             return "leave_management"
-        elif self.state.route_data.policy_request:
+        elif self.state.route_data.intent == RequestIntent.POLICY_ACCESS:
             return "policy_access"
         return "unsupported"
 
@@ -113,7 +109,8 @@ class EmployeeChatbotFlow(Flow[EmployeeFlowState]):
     def handle_leave(self):
         """Specialized agent for leave operations using extracted parameters."""
         leave_req = self.state.route_data.leave_request
-        
+        kb_tool = BedrockKBRetrieverTool(knowledge_base_id=os.environ["BEDROCK_KB_ID"])
+
         leave_agent = Agent(
             role="Leave Manager",
             goal="Execute leave-related operations using the provided parameters and tools.",
@@ -122,16 +119,15 @@ class EmployeeChatbotFlow(Flow[EmployeeFlowState]):
                 "the parameters provided by the router to execute your tasks accurately."
             ),
             llm=LLM(model=os.environ["MODEL_ID"], temperature=0),
-            tools=[InsertLeaveTool(), ReadLeavesTool(), GetCurrentDateTool()]
+            tools=[InsertLeaveTool(), ReadLeavesTool(), kb_tool]
         )
         
-        if leave_req.intent == LeaveIntent.APPLY:
+        if leave_req.leave_intent == LeaveIntent.APPLY:
             description = (
                 f"Apply for leave for employee {self.state.employee_id}. \n"
                 f"Leave Type: {leave_req.leave_type.value if leave_req.leave_type else 'Not specified'} \n"
                 f"Start Date: {leave_req.start_date or 'Not specified'} \n"
-                f"End Date: {leave_req.end_date or 'Not specified'} \n"
-                f"Reason: {leave_req.reason or 'No reason provided'} \n\n"
+                f"End Date: {leave_req.end_date or 'Not specified'} \n\n"
                 "Check the calendar year, allowed leaves, and current balance before inserting. "
                 "If details are missing, politely ask the employee for them."
             )
