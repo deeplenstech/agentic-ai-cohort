@@ -1,0 +1,34 @@
+[project]
+name = "employee_chatbot"
+version = "0.1.0"
+description = "employee chatbot using crewAI"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "boto3",
+    "crewai[anthropic,tools]>=0.130.0",
+    "langfuse>=3.5.0",
+    "openinference-instrumentation-crewai>=0.1.13",
+    "openinference-instrumentation-litellm",
+    "opentelemetry-exporter-otlp-proto-http",
+    "openlit",
+    "crewai-tools",
+    "litellm",
+    "opentelemetry-api",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-sdk",
+    "bedrock-agentcore>=1.8.0",
+    "deepeval>=3.9.6",
+    "deepteam>=1.0.6",
+]
+
+[project.scripts]
+employee_chatbot = "employee_chatbot.main:run"
+run_crew = "employee_chatbot.main:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.crewai]
+type = "crew"
