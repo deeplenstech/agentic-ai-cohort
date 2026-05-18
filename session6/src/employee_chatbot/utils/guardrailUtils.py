@@ -88,12 +88,20 @@ def register_guardrail_hooks():
         
         for msg in context.messages:
             content = msg.get("content", "")
+            role = msg.get("role", "")
+            if role != "user":
+                continue
             if not content:
                 continue
 
             processed_text, is_blocked = apply_guardrail_filters(content, source="INPUT")
             
             if is_blocked:
+                print("-------------------- INPUT ----------------------")
+                print(content)
+                print("-------------------- OUTPUT ---------------------")
+                print(processed_text)
+                print("------------------------------------")
                 logger.warning(f"Guardrail BLOCKED LLM prompt: {processed_text}")
                 # Returning False in before_llm_call blocks the LLM execution in CrewAI
                 return False 

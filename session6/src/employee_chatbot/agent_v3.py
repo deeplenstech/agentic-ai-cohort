@@ -60,6 +60,16 @@ class EmployeeChatbotFlow(Flow[EmployeeFlowState]):
     
     @start()
     def classify_and_route(self):
+        # This flow has been only tested with anthropic models. Hence making
+        # anthropic model check mandatory.
+        if (os.getenv("ANTHROPIC_API_KEY") is None):
+            print("Please set the ANTHROPIC_API_KEY environment variable")
+            return
+        model_id = os.getenv("MODEL_ID")
+        if model_id is None or not model_id.startswith("anthropic"):
+            print("Please set the MODEL_ID environment variable to an anthropic model")
+            return
+
         """First step: Use a Router Agent to classify the intent and extract data."""
         router_agent = Agent(
             role="Query Router",

@@ -48,16 +48,13 @@ def run():
                 "input": query,
                 "name": "Employee Chatbot Interaction"
             }
-            trace_metric_collection = os.getenv("DEEPEVAL_TRACE_METRIC_COLLECTION")
-            if trace_metric_collection:
-                trace_kwargs["metric_collection"] = trace_metric_collection
 
             with trace(**trace_kwargs):
                 conversationHistory = memoryUtils.loadShortTermMemory()
                 inputs = {
                     'employee_query': query,
                     'employee_id': employee_id,
-                    'conversationHistory': conversationHistory
+                    'conversationHistory': conversationHistory if conversationHistory else "No prior conversation history"
                 }
                 
                 agentVersion = os.getenv("AGENT_VERSION", "v1")

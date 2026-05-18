@@ -38,7 +38,7 @@ async def callback(input: str, turns: list[RTTurn] = None) -> RTTurn:
     inputs = {
         'employee_query': input,
         'employee_id': employee_id,
-        'conversationHistory': history
+        'conversationHistory': history if history else "No prior conversation history"
     }
     with ToolCallTracker() as tracker:
         console.print(Panel(input, title="[bold blue]🗣️ User Input[/bold blue]", border_style="blue"))
