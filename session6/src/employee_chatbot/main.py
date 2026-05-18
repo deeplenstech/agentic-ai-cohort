@@ -32,13 +32,6 @@ def run():
         query = console.input("[bold blue]You:[/bold blue] ")
         if query.strip().lower() == 'bye':
             console.print("[bold green]Chatbot:[/bold green] Goodbye!")
-            # Trigger thread-level evaluation on exit
-            # Ensure you have created a Multi-turn Metric Collection in Confident AI
-            metric_collection = os.getenv("DEEPEVAL_THREAD_METRIC_COLLECTION")
-            eval_kwargs = {"thread_id": session_id}
-            if metric_collection:
-                eval_kwargs["metric_collection"] = metric_collection
-            evaluate_thread(**eval_kwargs)
             break
 
         try:
