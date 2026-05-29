@@ -55,7 +55,7 @@ Your architecture document should cover:
 
 ---
 
-## Presentation Format (15 minutes prep → 5 minutes per group)
+## Presentation Format (10 minutes per group)
 
 Each group should be ready to present:
 
