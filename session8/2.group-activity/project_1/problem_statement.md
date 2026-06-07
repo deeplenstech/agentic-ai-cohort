@@ -1,8 +1,8 @@
-# Project 1 — 🔥 FireDrill: The On-Call Co-Pilot
+# Project 1: FireDrill - The On-Call Co-Pilot
 
 > 40-minute group activity: take a working-but-naive multi-agent incident-response system and refine it for production.
 
-> 💡 **AI is encouraged.** Use Claude, ChatGPT, or any AI tool to brainstorm, challenge your assumptions, or draft your presentation. Treat AI as a team member — but be ready to explain and defend every decision it helps you make.
+> 💡 **AI is encouraged.** Use Claude, ChatGPT, or any AI tool to brainstorm, challenge your assumptions, or draft your presentation. Treat AI as a team member, but be ready to explain and defend every decision it helps you make.
 
 ---
 
@@ -13,19 +13,19 @@
 | **Refine the system** | 40 minutes | Your group hardens the given baseline along the 4 dimensions below |
 | **Present** | 10 minutes | Walk the cohort through your refined design and the tradeoffs you made |
 
-You are given a problem statement **and a working-but-naive baseline implementation**. Your job is **not** to redesign from zero — it is to make it **production-ready**.
+You are given a problem statement and a working-but-naive baseline implementation. Your job is not to redesign from zero. It is to make it production-ready.
 
 ---
 
 ### a) Problem Statement
 
-At 3:17 AM PagerDuty fires: `checkout-api p99 latency > 2s, error rate 8%`. The on-call SRE now has ~15 minutes of SLA budget and four browser tabs to open: the metrics dashboard, the log explorer, the trace waterfall, and the deploy timeline. They context-switch, eyeball graphs, and try to hold a causal story in their head while half-awake. Mean-time-to-RCA is dominated not by *fixing* but by *correlating* — the signal is almost always already in the telemetry; it is just spread across five systems and a tired human has to stitch it together under time pressure.
+It's 3:17 AM. PagerDuty fires: `checkout-api p99 latency > 2s, error rate 8%`. The on-call SRE has about 15 minutes of SLA budget left. They open four browser tabs: the metrics dashboard, the log explorer, the trace waterfall, and the deploy timeline. They context-switch between them, eyeball graphs, and try to hold a causal story in their head while half-awake. The slow part is rarely the fix itself. It's the correlation. The signal is usually already there in the telemetry, just spread across five systems, and a tired human has to stitch it together under time pressure.
 
-**The question this agent answers:** *"Given this firing alert, what is the most likely root cause, what evidence supports it, and what is the single safest next action?"* It does **not** auto-remediate — it compresses the correlation work so the human reaches a decision faster, with citations they can trust at 3 AM.
+**The question this agent answers:** *"Given this firing alert, what is the most likely root cause, what evidence supports it, and what is the single safest next action?"* It does not auto-remediate. It compresses the correlation work so the human reaches a decision faster, with citations they can trust at 3 AM.
 
 ### b) The Baseline You're Given (deliberately naive)
 
-A single **Orchestrator** drives **five specialist agents strictly one at a time**, in a fixed order, blocking on each before starting the next. Each specialist has one responsibility and one tool.
+A single Orchestrator drives five specialist agents strictly one at a time, in a fixed order, blocking on each before starting the next. Each specialist has one responsibility and one tool.
 
 | Agent | Single responsibility | Tool(s) |
 |---|---|---|
@@ -36,7 +36,7 @@ A single **Orchestrator** drives **five specialist agents strictly one at a time
 | **DeployAgent** | List deploys / PRs in the last 60 min for the service | GitHub / deploy MCP |
 | **RunbookAgent** | Retrieve the matching runbook | Vector DB over runbooks |
 
-The Orchestrator queries each source one at a time, appends the **raw output** to a growing context, and only the *final* LLM call attempts correlation. Every agent uses the **same large reasoning model**. No reflection, no parallelism, no cross-checking.
+The Orchestrator queries each source one at a time, appends the raw output to a growing context, and only the final LLM call attempts correlation. Every agent uses the same large reasoning model. There's no reflection, no parallelism, and no cross-checking.
 
 ```
         PagerDuty alert
@@ -60,19 +60,19 @@ The Orchestrator queries each source one at a time, appends the **raw output** t
 
 > The baseline is functional. Your job is to identify where it falls short and make it production-ready.
 
-### c) Your Task — Refine on 4 Dimensions
+### c) Your Task: Refine on 4 Dimensions
 
 **1. Multi-agent pattern**
-Five agents run sequentially on independent data sources. Is sequential the right choice here? What considerations would guide a different topology — and what new problems might that introduce?
+Five agents run sequentially on independent data sources. Is sequential the right choice here? What would push you toward a different topology, and what new problems might that introduce?
 
 **2. Evaluation**
-An on-call engineer receives a summary and acts on it at 3 AM. How do you measure whether the system helps or hurts? Design an approach that covers before deployment, during live incidents, and over time.
+An on-call engineer receives a summary and acts on it at 3 AM. How do you measure whether the system helps or hurts? Think about before deployment, during live incidents, and over time.
 
 **3. LLM strategy**
-Every agent uses the same large reasoning model. Should they? How would you decide — and how would you ensure the system stays functional if a provider is unavailable exactly when an incident fires?
+Every agent uses the same large reasoning model. Should they? How would you decide which model goes where, and how would you keep the system working if a provider goes down right when an incident fires?
 
 **4. Security**
-The agents have read access to production telemetry, and the input data originates from systems under active attack or adversarial conditions. What could go wrong, and how does your risk surface change if the system ever takes action rather than just observing?
+The agents have read access to production telemetry, and the input data comes from systems that may be under active attack. What could go wrong here? And how does the risk change if the system ever takes action instead of just observing?
 
 ### d) Time Limit
 
@@ -82,9 +82,9 @@ The agents have read access to production telemetry, and the input data originat
 
 ## Presentation Format (10 minutes)
 
-1. **The refined agent map** — what you changed and why
-2. **Your eval plan** — the metric that matters most, and how you'd measure it
-3. **Your LLM strategy** — how you'd keep cost low and the system available during a provider outage
-4. **Your top security risk** — and how you'd close it
+1. **The refined agent map**: what you changed and why
+2. **Your eval plan**: the metric that matters most, and how you'd measure it
+3. **Your LLM strategy**: how you'd keep cost low and the system available during a provider outage
+4. **Your top security risk**: and how you'd close it
 
 > **Bonus discussion:** Where do you draw the line between "agent suggests, human decides" and letting the agent take a reversible action on its own?
