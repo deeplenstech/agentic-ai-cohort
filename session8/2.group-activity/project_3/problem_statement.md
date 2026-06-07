@@ -1,4 +1,4 @@
-# Project 3: Ledger Lockdown - An Invoice-to-Payment Approval Swarm
+# Project 3: Ledger Lockdown - An Invoice-to-Payment Approval 
 
 > 40-minute group activity: take a working-but-naive multi-agent invoice-approval system and refine it for production.
 
