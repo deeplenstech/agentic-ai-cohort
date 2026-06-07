@@ -13,3 +13,4 @@ Each session has its own folder with pre-requisites, assignments, and projects. 
 - [Session 5](session5/1.employee_chatbot/README.md)
 - [Session 6](session6/README.md)
 - [Session 7](session7/README.md)
+- [Session 8](session8/README.md)
