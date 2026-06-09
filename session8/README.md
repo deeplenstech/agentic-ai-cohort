@@ -19,9 +19,9 @@ Two groups (2–3 learners each) work on separate projects in parallel.
 
 | Group | Project | Domain | Link |
 |---|---|---|---|
-| **A** | 🔥 FireDrill: The On-Call Co-Pilot | SRE / incident response | [problem_statement.md](2.group-activity/project_1/problem_statement.md) |
-| **B** | Deflect-or-Defer: A Cost-Aware Support Swarm | E-commerce customer support | [problem_statement.md](2.group-activity/project_2/problem_statement.md) |
-| *spare* | Ledger Lockdown: An Invoice-to-Payment Approval Swarm | Fintech / AP automation | [problem_statement.md](2.group-activity/project_3/problem_statement.md) |
+| **A** | 🔥 FireDrill: The On-Call Co-Pilot | SRE / incident response | [problem_statement.md](1.group-activity/project_1/problem_statement.md) |
+| **B** | Deflect-or-Defer: A Cost-Aware Support Swarm | E-commerce customer support | [problem_statement.md](1.group-activity/project_2/problem_statement.md) |
+| *spare* | Ledger Lockdown: An Invoice-to-Payment Approval Swarm | Fintech / AP automation | [problem_statement.md](1.group-activity/project_3/problem_statement.md) |
 
 > Project 3 is a **spare/swap** — use it for a 3rd group, an alternate domain, or a security-heavy challenge.
 
