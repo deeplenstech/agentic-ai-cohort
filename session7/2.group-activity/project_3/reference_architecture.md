@@ -37,6 +37,8 @@ Before every software release, engineering and release management teams spend 1 
 
 The Ticket Analyst Agent approximates team load by calling `searchJiraIssuesUsingJql` with a JQL query such as `project = X AND sprint in openSprints() AND assignee in membersOf("{team_name}")` to retrieve open sprint issues assigned to the release team. The `{team_name}` parameter is provided by the Release Manager at invocation time alongside the `fixVersion`. The count and status distribution of those issues serve as a proxy for team capacity. This is explicitly a proxy. The Jira MCP server does not expose a direct team capacity or sprint velocity endpoint, so open sprint load is used as the best available signal.
 
+**Why this metric is computed:** The proxy feeds the **Team Load** risk dimension (15% weight) consumed by the Risk Scoring Agent (see Section 7, item 4) and surfaced as `dimension_scores.team_load` in the `GoNoGoReport` schema above. It exists to capture release *readiness* — whether the owning team has the bandwidth to resolve remaining blockers before the deployment window — which the blocker, dependency, and CI/CD dimensions do not measure. A high open-sprint load raises the likelihood that unresolved blockers remain unresolved at ship time, which is itself a risk signal.
+
 ### GoNoGoReport JSON Schema
 
 The Risk Scoring Agent is required to produce a `GoNoGoReport` object conforming to the following schema:
@@ -98,14 +100,14 @@ The Orchestrator acts as a stateful coordinator. It does not perform analysis it
 ### Specific Stages
 
 **Stage 1: Ticket Analysis (sequential, blocking)**
-The Orchestrator invokes the Ticket Analyst Agent first. No downstream work can begin without the full ticket inventory. The Ticket Analyst returns a structured `TicketSummary` object containing ticket counts by type and status, a list of unresolved tickets, and a boolean `has_potential_blockers` flag. If `has_potential_blockers` is false, the Orchestrator short-circuits straight to Stage 3, skipping dependency traversal.
+The Orchestrator invokes the Ticket Analyst Agent first. No downstream work can begin without the full ticket inventory. The Ticket Analyst returns a structured `TicketSummary` object containing ticket counts by type and status, a list of unresolved tickets, and a boolean `has_potential_blockers` flag. This flag gates only the dependency traversal in Stage 2, not the entire stage (see below).
 
-**Stage 2: Parallel Fan-Out (conditional, concurrent)**
-If blockers were detected, the Orchestrator fans out to two agents simultaneously:
-- **Dependency Graph Agent**: traverses issue links using BFS to build the full blocker chain
-- **CI/CD Enrichment Agent**: queries build pipelines for test and coverage data
+**Stage 2: Parallel Fan-Out (concurrent, with one conditional member)**
+The Orchestrator fans out to up to two agents simultaneously:
+- **Dependency Graph Agent** *(conditional)*: traverses issue links using BFS to build the full blocker chain. This agent runs **only if `has_potential_blockers` is true**. If the flag is false there is, by definition, no blocker chain to traverse, so the agent is skipped and a `DependencyReport{status: NOT_APPLICABLE}` is passed forward.
+- **CI/CD Enrichment Agent** *(always runs)*: queries build pipelines for test and coverage data. This agent is **independent of the blocker flag** — test pass rate, coverage delta, and flaky-test count are real risk signals even on a release with zero blockers, so it runs on every assessment.
 
-Both run concurrently. The Orchestrator waits for both to complete or until the per-stage timeout is reached. If either times out, the Orchestrator marks that dimension's data as `UNAVAILABLE` and continues.
+Whichever agents are dispatched run concurrently. The Orchestrator waits for them to complete or until the per-stage timeout is reached. If one times out, the Orchestrator marks that dimension's data as `UNAVAILABLE` and continues.
 
 **Stage 3: Risk Scoring (sequential, blocking)**
 The Risk Scoring Agent receives the aggregated outputs from Stages 1 and 2. It scores risk across four weighted dimensions and produces a `GoNoGoReport` JSON object. If structured output validation fails, a self-correction retry loop fires (up to 3 retries).
@@ -122,11 +124,11 @@ The Delivery Agent receives the validated `GoNoGoReport` and publishes it to Con
 **Stage 1: Ticket Collection and Classification:**
 The Orchestrator calls the Ticket Analyst Agent with the version string. The Ticket Analyst calls `searchJiraIssuesUsingJql` with JQL `fixVersion = "v2.4.1"`, paginating to retrieve all tickets. For each issue, it uses LLM reasoning to classify the type and normalizes the resolution status into one of `DONE`, `IN_PROGRESS`, `OPEN`, or `BLOCKED`. It also runs the open-sprint team-load query as a capacity proxy. All user identity fields are stripped at this normalization step (see Security NFR). The agent aggregates the results into a `TicketSummary` and sets `has_potential_blockers = true` if any open issue is `BLOCKED` or has an `is-blocked-by` link. The `TicketSummary` is written to the state store and returned to the Orchestrator.
 
-**Conditional Short-Circuit:**
-The Orchestrator checks `has_potential_blockers`. If false, it skips Stage 2 entirely. Both the Dependency Graph Agent and the CI/CD Enrichment Agent are skipped. The Orchestrator passes `DependencyReport{status: NOT_APPLICABLE}` and `CICDReport{status: NOT_APPLICABLE}` to the Risk Scoring Agent, which treats those dimensions as N/A and redistributes their weights. This path cuts run time substantially for clean releases and avoids hundreds of unnecessary Jira API calls.
+**Conditional Short-Circuit (dependency traversal only):**
+The Orchestrator checks `has_potential_blockers`. If false, it skips **only the Dependency Graph Agent** and passes `DependencyReport{status: NOT_APPLICABLE}` to the Risk Scoring Agent, which treats that dimension as N/A and redistributes its weight. The CI/CD Enrichment Agent still runs, because CI/CD health is independent of whether any ticket is blocked — a clean blocker list does not imply a healthy test suite or coverage trend. Skipping the dependency traversal is what cuts run time for clean releases and avoids hundreds of unnecessary Jira API calls (the BFS traversal is the Jira-heavy step; the CI/CD agent calls the CI/CD REST API, not Jira). The short-circuit is a genuine runtime planning decision, not a static branch.
 
-**Stage 2: Parallel Fan-Out (when blockers exist):**
-The Orchestrator dispatches two sub-agents simultaneously.
+**Stage 2: Parallel Fan-Out:**
+The Orchestrator dispatches the CI/CD Enrichment Agent on every run, and the Dependency Graph Agent alongside it whenever `has_potential_blockers` is true. The dispatched agents run simultaneously.
 
 The Dependency Graph Agent runs a breadth-first traversal starting from each blocked issue. It visits each linked issue once using a visited set, with a configurable depth limit (`MAX_TRAVERSAL_DEPTH`, default: 5). The visited set also handles circular references. For each node, it calls `getJiraIssue` and reads the internal links from the returned `issuelinks` field, then enqueues any unresolved upstream dependency. There is no bulk issue-fetch tool, so each call fetches one issue. The output is a `DependencyReport` containing the blocker chain, the depth of the deepest dependency, and a list of unresolved root blockers.
 
@@ -151,182 +153,46 @@ The Orchestrator marks the run `COMPLETE` in the state store and logs the final 
 
 ---
 
-## 6. Diagrams
-
-### 6.1 System Context Diagram
+## 6. Agent Map Diagram
 
 ```mermaid
-graph TD
-    RM["Release Manager"]
-    Pipeline["CI/CD Pipeline Trigger"]
-
-    RRS["Release Risk System"]
-
-    Jira["Jira (Atlassian Rovo MCP)"]
-    CICDSys["CI/CD System"]
-    Confluence["Confluence"]
-    Slack["Slack"]
-    LLMProvider["LLM Provider (Claude Sonnet)"]
-
-    RM -->|"submit fixVersion"| RRS
-    Pipeline -->|"pre-release hook"| RRS
-
-    RRS -->|"read issues (JQL)"| Jira
-    Jira -->|"issue data"| RRS
-
-    RRS -->|"GET /builds, GET /coverage"| CICDSys
-    CICDSys -->|"build + coverage metrics"| RRS
-
-    RRS -->|"createConfluencePage / updateConfluencePage"| Confluence
-    Confluence -->|"report deep-link"| RM
-
-    RRS -->|"POST webhook"| Slack
-    Slack -->|"Go/No-Go summary"| RM
-
-    RRS -->|"prompt + structured data"| LLMProvider
-    LLMProvider -->|"GoNoGoReport JSON"| RRS
-```
-
-### 6.2 Agent Map Diagram
-
-```mermaid
+---
+config:
+  layout: elk
+  elk:
+    nodePlacementStrategy: NETWORK_SIMPLEX
+  flowchart:
+    nodeSpacing: 60
+    rankSpacing: 80
+    curve: linear
+---
 graph TD
     OA["Orchestrator Agent\n(sequence + fan-out control)"]
 
     TA["Ticket Analyst Agent"]
-    TA_T1["searchJiraIssuesUsingJql\n(fixVersion + openSprints)"]
-    TA_T2["getJiraIssue"]
-    TA_T3["LLM: classify + summarise"]
 
     subgraph parallel_stage2["Stage 2: Parallel Fan-Out (simultaneous)"]
         DGA["Dependency Graph Agent"]
-        DGA_T1["getJiraIssue (reads issuelinks)"]
-        DGA_T2["getIssueLinkTypes"]
-        DGA_T3["BFS traversal + visited set\n(MAX_TRAVERSAL_DEPTH=5)"]
-
         CICD_A["CI/CD Enrichment Agent"]
-        CICD_T1["GET /builds"]
-        CICD_T2["GET /coverage"]
-        CICD_T3["timeout guard"]
     end
 
     RSA["Risk Scoring Agent"]
-    RSA_T1["LLM: weighted risk scoring\n(temperature=0)"]
-    RSA_T2["GoNoGoReport schema validator"]
-    RSA_T3["retry loop (max 3)"]
 
     DA["Delivery Agent"]
-    DA_T1["createConfluencePage /\nupdateConfluencePage"]
-    DA_T2["POST Slack webhook"]
-    DA_T3["addCommentToJiraIssue"]
 
     OA -->|"stage 1: ticket list"| TA
-    TA --> TA_T1
-    TA --> TA_T2
-    TA --> TA_T3
     TA -->|"TicketSummary"| OA
 
-    OA -->|"stage 2a: parallel fan-out\n(if blockers detected)"| DGA
-    DGA --> DGA_T1
-    DGA --> DGA_T2
-    DGA --> DGA_T3
+    OA -->|"stage 2a: parallel fan-out\n(only if blockers detected)"| DGA
     DGA -->|"DependencyReport"| OA
 
-    OA -->|"stage 2b: parallel fan-out\n(simultaneous with DGA)"| CICD_A
-    CICD_A --> CICD_T1
-    CICD_A --> CICD_T2
-    CICD_A --> CICD_T3
+    OA -->|"stage 2b: parallel fan-out\n(always runs)"| CICD_A
     CICD_A -->|"CICDReport"| OA
 
     OA -->|"stage 3: all data"| RSA
-    RSA --> RSA_T1
-    RSA --> RSA_T2
-    RSA --> RSA_T3
     RSA -->|"GoNoGoReport"| OA
 
     OA -->|"stage 4: report"| DA
-    DA --> DA_T1
-    DA --> DA_T2
-    DA --> DA_T3
-```
-
-### 6.3 Sequence Diagram: Happy Path
-
-```mermaid
-sequenceDiagram
-    participant RM as Release Manager
-    participant OA as Orchestrator Agent
-    participant TA as Ticket Analyst Agent
-    participant Jira as Jira MCP Server
-    participant DGA as Dependency Graph Agent
-    participant CICD_A as CI/CD Enrichment Agent
-    participant CICDSys as CI/CD System
-    participant LLM as LLM Provider
-    participant RSA as Risk Scoring Agent
-    participant DA as Delivery Agent
-    participant Confluence as Confluence
-    participant Slack as Slack
-
-    RM->>OA: submit_release_version("v2.4.1")
-    OA->>TA: analyze_tickets(fixVersion="v2.4.1")
-    TA->>Jira: searchJiraIssuesUsingJql(fixVersion="v2.4.1", maxResults=50, startAt=0)
-    Jira-->>TA: [issue list, paginated]
-    TA->>Jira: getJiraIssue(key) [for unresolved issues]
-    Jira-->>TA: issue detail
-    TA->>Jira: searchJiraIssuesUsingJql(project=X AND sprint in openSprints())
-    Jira-->>TA: [sprint issues for team load proxy]
-    TA-->>OA: TicketSummary{total=47, open=3, blocked=2, has_potential_blockers=true}
-
-    alt no unresolved blockers detected
-        OA->>RSA: shortcircuit(TicketSummary, DependencyReport{status: NOT_APPLICABLE}, CICDReport{status: NOT_APPLICABLE})
-    else blockers detected
-        par Dependency traversal
-            OA->>DGA: traverse_dependencies(blocked_issues=[PROJ-101, PROJ-88])
-            DGA->>Jira: getJiraIssue("PROJ-101")
-            Jira-->>DGA: issuelinks: [is-blocked-by PROJ-55]
-            DGA->>Jira: getJiraIssue("PROJ-55")
-            Jira-->>DGA: PROJ-55 status=OPEN, issuelinks: [] (no further blockers)
-            DGA-->>OA: DependencyReport{root_blockers=[PROJ-55], max_depth=2, cycles=[]}
-        and CI/CD enrichment
-            OA->>CICD_A: fetch_cicd_metrics(version="v2.4.1")
-            alt CICDSys available
-                CICD_A->>CICDSys: GET /builds?version=v2.4.1
-                CICDSys-->>CICD_A: {pass_rate: 0.94, coverage_delta: +2.1%, flaky_count: 3}
-                CICD_A->>CICDSys: GET /coverage?version=v2.4.1
-                CICDSys-->>CICD_A: {coverage_delta: -1.2%}
-                CICD_A-->>OA: CICDReport{status: OK, pass_rate: 0.94, coverage_delta: -1.2, flaky_count: 3}
-            else CICDSys unavailable (503/timeout)
-                CICD_A-->>OA: CICDReport{status: UNAVAILABLE}
-                Note over RSA: Redistribute CI/CD weight (20%) proportionally to other dimensions
-            end
-        end
-    end
-
-    OA->>RSA: score_release_risk(TicketSummary, DependencyReport, CICDReport)
-    RSA->>LLM: score_dimensions(data, rubric, temperature=0)
-    LLM-->>RSA: GoNoGoReport JSON
-    RSA->>RSA: validate GoNoGoReport schema
-
-    loop up to 3 retries
-        alt schema invalid
-            RSA->>LLM: re-score with explicit JSON formatting instructions
-            LLM-->>RSA: revised GoNoGoReport JSON
-            RSA->>RSA: validate GoNoGoReport schema
-        end
-    end
-
-    RSA-->>OA: GoNoGoReport{score=68, recommendation=NO_GO, confidence=HIGH, action_items=["Resolve PROJ-55 blocking PROJ-101 before release"]}
-
-    OA->>DA: deliver_report(GoNoGoReport)
-    DA->>Confluence: createConfluencePage("Release Risk: v2.4.1", full_report)
-    Confluence-->>DA: page_url
-    DA->>Slack: POST https://hooks.slack.com/services/{WEBHOOK_PATH} (summary+page_url)
-    Slack-->>DA: ok
-    DA->>Jira: addCommentToJiraIssue(releaseIssue, formatted_summary)
-    Jira-->>DA: ok
-    DA-->>OA: delivery_complete{channels=[confluence, slack, jira]}
-
-    OA-->>RM: run_complete{score=68, recommendation=NO_GO, report_url=page_url}
 ```
 
 ---
@@ -334,7 +200,7 @@ sequenceDiagram
 ## 7. Key Agentic Behaviors
 
 1. **Conditional Planning / Short-Circuit (no blockers detected)**
-   After Stage 1, the Orchestrator evaluates the `has_potential_blockers` flag before committing to Stage 2. If no blocked or dependency-linked open tickets exist, it skips Stage 2 entirely. Both the Dependency Graph Agent and the CI/CD Enrichment Agent are skipped. The Orchestrator passes `DependencyReport{status: NOT_APPLICABLE}` and `CICDReport{status: NOT_APPLICABLE}` to the Risk Scoring Agent, which redistributes the weight of the N/A dimensions proportionally across the remaining dimensions and labels them `NOT_APPLICABLE` in the report. This path cuts run time substantially for clean releases and avoids hundreds of unnecessary Jira API calls. It is a genuine planning decision made at runtime based on observed data, not a static workflow branch.
+   After Stage 1, the Orchestrator evaluates the `has_potential_blockers` flag before committing to the dependency traversal. If no blocked or dependency-linked open tickets exist, it skips **only the Dependency Graph Agent** and passes `DependencyReport{status: NOT_APPLICABLE}` to the Risk Scoring Agent, which redistributes that dimension's weight proportionally across the remaining dimensions and labels it `NOT_APPLICABLE` in the report. The CI/CD Enrichment Agent is **not** gated on this flag and runs regardless, because CI/CD health (test pass rate, coverage delta, flaky count) is an independent risk signal that holds even when no tickets are blocked. Gating only the dependency traversal is deliberate: the BFS traversal is the expensive Jira-heavy step, so skipping it is what cuts run time and avoids hundreds of unnecessary Jira API calls, while still preserving the cheap, independent CI/CD signal. It is a genuine planning decision made at runtime based on observed data, not a static workflow branch.
 
 2. **Self-Correction via Structured Output Retry Loop**
    The Risk Scoring Agent is required to emit a `GoNoGoReport` that conforms to the strict JSON schema defined in Section 2. After each LLM call, the output is validated against the schema using a JSON Schema validator. If validation fails (missing field, wrong type, out-of-range score), the retry strategy escalates progressively:

@@ -6,7 +6,7 @@
 
 ## The one idea everything follows from
 
-The baseline sends every message through every agent with one mid-tier model. That is wrong in both directions at once. It is too expensive for the easy 70% ("where is my order?"), and too shallow and too trusting for the dangerous minority ("why was I charged twice?", refund disputes). A WISMO lookup and a billing dispute should not share the same path, the same model, or the same authority.
+The baseline sends every message through every agent with one mid-tier model. That is wrong in both directions at once. It is too expensive for the easy 70% ("where is my order?"), and too shallow and too trusting for the dangerous minority ("why was I charged twice?", refund disputes). A WISMO ("Where Is My Order?") lookup and a billing dispute should not share the same path, the same model, or the same authority.
 
 Two principles drive the redesign:
 
@@ -23,65 +23,63 @@ The asymmetry that tunes everything: a confident wrong answer is worse than an h
 
 The five agents have almost no real data dependency on each other, and most messages do not need all five. Replace the fixed chain with a **triage router → intent-specific paths → confidence-gated resolution or human handoff.**
 
-```
-   Customer message
-         │
-         ▼
-  ┌──────────────┐
-  │ INTAKE        │  normalize, extract customer ID (CRM lookup)
-  │ (Haiku)       │  content-as-DATA, strict schema out
-  └──────┬───────┘
-         ▼
-  ┌──────────────┐  classify intent + risk: WISMO / return / cancel /
-  │ TRIAGE ROUTER │  billing-dispute / other. Score on $ at stake,
-  │ (Haiku)       │  account history, sentiment, extraction confidence.
-  └──┬────┬───┬──┘
-     │    │   │
- low-risk │   │ high-risk / money-moving / low confidence
- simple   │   │
-   ▼      │   ▼
-┌──────────────┐        ┌──────────────────────────────┐
-│ FAST PATH     │        │ HEAVY PATH (parallel fan-out) │
-│ WISMO etc.    │        │  ┌────────┐ ┌────────┐        │
-│ Order lookup +│        │  │RETRIEVAL│ │ ORDER  │        │
-│ templated     │        │  │ (KB)   │ │(status,│        │
-│ reply.        │        │  └───┬────┘ │ charges)│       │
-│ No big LLM.   │        │      │      └───┬────┘        │
-└──────┬────────┘        │      └────┬─────┘             │
-       │                 │           ▼                    │
-       │                 │  ┌──────────────────┐         │
-       │                 │  │ RESOLUTION (Opus) │         │
-       │                 │  │ PROPOSAL ONLY,    │         │
-       │                 │  │ cited, no tools   │         │
-       │                 │  └────────┬──────────┘         │
-       │                 └───────────┼────────────────────┘
-       │                  confidence + $ + policy tiered
-       │             ┌───────────────┼───────────────┐
-       │         auto│            gray│         hard flag│
-       │         (≥T)│         (gray) │      / dispute   │
-       ▼             ▼               ▼                 ▼
-  ┌──────────────────────┐   ┌──────────┐      ┌──────────┐
-  │ DETERMINISTIC ACTION  │   │  HUMAN   │      │ ESCALATE │
-  │ GATE (policy check,   │◀──│  REVIEW  │      │ (billing/│
-  │ refund limits, dedup) │   │  QUEUE   │      │  fraud)  │
-  └──────────┬───────────┘   └──────────┘      └──────────┘
-             ▼
-  ┌──────────────────────┐
-  │ REPLY (format + send) │  → Customer
-  └──────────┬───────────┘
-             ▼
-  ┌──────────────────────┐
-  │ AUDIT LOG (append-    │  inputs, tool I/O, model+version,
-  │ only) → EVAL / FEEDBACK│ confidence, action, human overrides
-  └──────────────────────┘
+```mermaid
+---
+config:
+  layout: elk
+  elk:
+    nodePlacementStrategy: NETWORK_SIMPLEX
+  flowchart:
+    nodeSpacing: 60
+    rankSpacing: 80
+    curve: linear
+---
+flowchart TD
+    MSG([Customer message])
+
+    INTAKE["<b>INTAKE + TRIAGE</b> (Haiku, one call)<br/>normalize, extract customer ID, classify intent<br/>(WISMO / return / cancel / billing-dispute / other),<br/>sentiment, extraction confidence.<br/>content-as-DATA, strict schema out"]
+
+    TRIAGE["<b>RISK SCORE</b> (deterministic)<br/>CRM / order lookup, then score on $ at stake,<br/>account history, repeat-refunder flags."]
+
+    FAST["<b>FAST PATH</b><br/>WISMO etc.<br/>Order lookup + templated reply.<br/>No big LLM."]
+
+    subgraph HEAVY["HEAVY PATH"]
+        direction TB
+        RES["<b>RESOLUTION</b> (Opus)<br/>PROPOSAL ONLY, cited.<br/>calls READ-ONLY tools in parallel.<br/>holds NO money tools"]
+        RET[("KB RETRIEVAL<br/><i>read-only tool</i><br/>grounds policy claims")]
+        ORD[("ORDER lookup<br/>status, charges<br/><i>read-only tool,<br/>scoped to customer ID</i>")]
+        RES -.->|reads, in parallel| RET
+        RES -.->|reads, in parallel| ORD
+    end
+
+    GATE["<b>DETERMINISTIC ACTION GATE</b><br/>policy check, refund limits, dedup"]
+    HUMAN["HUMAN<br/>REVIEW QUEUE"]
+    ESC["ESCALATE<br/>(billing / fraud)"]
+    REPLY["REPLY (format + send)"]
+    AUDIT["<b>AUDIT LOG</b> (append-only) → EVAL / FEEDBACK<br/>inputs, tool I/O, model+version,<br/>confidence, action, human overrides"]
+    CUST([Customer])
+
+    MSG --> INTAKE --> TRIAGE
+    TRIAGE -->|low-risk, simple| FAST
+    TRIAGE -->|high-risk / money-moving / low confidence| RES
+
+    RES -->|"auto (≥T)"| GATE
+    RES -->|gray band| HUMAN
+    RES -->|hard flag / dispute| ESC
+
+    FAST --> GATE
+    HUMAN -->|approve / edit| GATE
+    ESC -->|specialist resolves| REPLY
+    GATE --> REPLY --> CUST
+    REPLY --> AUDIT
 ```
 
 **Why each move:**
 
-- **Triage first.** A cheap classifier decides intent and risk before any expensive work. Most WISMO contacts never touch the KB or the big model.
+- **Triage first, and folded into intake.** A single cheap Haiku call normalizes the message, extracts the customer ID, and classifies intent before any expensive work — intake and triage were both Haiku, both ran on every contact, and triage already consumed intake's output, so the serial two-call split was pure cost and latency. **Risk scoring stays deterministic:** $ at stake, account history, and repeat-refunder flags come from the CRM/order lookup and code, not model judgment (see C3). Most WISMO contacts never touch the KB or the big model.
 - **Deterministic where possible.** Order status is a lookup. Duplicate-charge detection is a join over charge history. Refund eligibility is a policy rule. None of these should be an LLM.
-- **Parallel fan-out on the heavy path.** Retrieval and Order pulls have no dependency on each other. Serializing them is pure latency tax.
-- **Resolution proposes, it does not act.** The model drafts a decision and a reply. A deterministic gate decides whether to execute, and only within hard policy limits.
+- **Resolution gathers its own evidence with read-only tools.** Retrieval and Order are **tools, not agents**. Resolution calls them itself, in parallel (they have no dependency on each other, so serializing is pure latency tax). The order lookup is **scoped server-side to the customer ID resolved at triage**, so even though the model picks the call, an injected message cannot pivot the lookup to another customer's order (T0/T4).
+- **Resolution proposes, it does not act, and holds no money tools.** The model may read and retrieve, but `issue_refund` / `modify_order` are not in its tool set. It drafts a decision and a reply; a deterministic gate decides whether to execute, and only within hard policy limits.
 - **Confidence and dollar gating.** Auto-resolve only clean, low-stakes, high-confidence contacts. Everything else goes to a human.
 
 **New failure modes the topology adds, and mitigations:**
@@ -90,7 +88,7 @@ The five agents have almost no real data dependency on each other, and most mess
 |---|---|
 | Misrouting at triage | Bias ambiguous or money-touching cases to the heavy path. Misroute toward more care, not less. |
 | More code paths, harder to debug | Keep the router deterministic and unit-tested. Make every contact replayable from the audit log. |
-| Partial tool failure on fan-out | Per-tool deadline. Proceed on what arrived and label missing data. Never auto-resolve on incomplete evidence. |
+| Partial tool failure on a parallel tool call | Per-tool deadline. Proceed on what arrived and label missing data. Never auto-resolve on incomplete evidence. |
 | Injection surface grows with more hops | Re-apply content-as-data delimiting at every inter-agent boundary (see section 4). |
 
 ---
@@ -131,8 +129,7 @@ One mid-tier model everywhere is wrong in both directions: overkill for intent c
 
 | Task | Model | Why |
 |---|---|---|
-| Intake normalization, ID extraction | Haiku (`claude-haiku-4-5`) | High volume, bounded, structured output |
-| Triage classification | Haiku | Fast, cheap, runs on every contact |
+| Intake + triage (normalize, ID extraction, intent classification) | Haiku (`claude-haiku-4-5`) | High volume, bounded, structured output. One call, not two: both ran on every contact and triage already depended on intake's output, so the serial split was pure cost and latency. Fewer hops also shrinks the injection surface. |
 | Retrieval relevance / WISMO reply draft | Haiku | Mostly retrieval plus a templated answer |
 | Resolution on disputes / refunds (heavy path only) | Opus (`claude-opus-4-8`) | High-stakes reasoning, the risky minority only |
 
@@ -211,7 +208,7 @@ The threshold is not one global number. It is a function of dollars and risk.
 
 ## 6. Presentation cheat-sheet (the 4 talking points)
 
-1. **Refined agent map:** serial single-model chain to **triage router to deterministic fast-path (WISMO etc.) vs heavy parallel fan-out (retrieval plus order) to an Opus resolution proposal to a deterministic action gate plus human gate.** Cheaper and safer. The LLM reads and proposes, code and humans move money.
+1. **Refined agent map:** serial single-model chain to **triage router to deterministic fast-path (WISMO etc.) vs heavy path where Opus resolution calls read-only retrieval + order tools in parallel (tools, not agents), then emits a proposal to a deterministic action gate plus human gate.** Cheaper and safer. Opus reads, retrieves, and proposes; it holds no money tools, so code and humans move money.
 2. **Eval plan:** primary metric is **true resolution rate** (not deflection), guarded by **reopen / re-contact rate** so deflection cannot be gamed, plus citation faithfulness and money-side precision. Golden set plus red-team corpus, offline to shadow to online, override feedback.
 3. **LLM strategy:** Haiku for intake, triage, and WISMO replies. Opus for disputes only, on the risky minority. Cost held by tiering, prompt caching, and a deterministic fast path. Availability via tight retries, an Opus to Sonnet to Haiku ladder, multi-provider failover, and a **degrade-toward-human, never-blind-action** floor.
 4. **Top security risk:** **prompt injection in the customer message driving an unwarranted refund.** Closed by making the message structurally incapable of being an instruction, giving the LLM no money tool, and letting deterministic policy own refunds with human-gated thresholds. No in-message text can move money the policy does not already allow.

@@ -29,54 +29,55 @@ The asymmetry that tunes everything: a fast wrong answer is worse than a slow ri
 
 ### Topology
 
-```
-   Invoice PDF / email  ──▶  INGEST + EXTRACTOR
-   (attacker-controlled)     - sandbox parse, disarm, AV         ← security boundary
-                             - OCR/parse (Haiku 4.5)
-                             - content treated as DATA, delimited
-                             - strict JSON schema + per-field confidence
-                                      │
-                                      ▼
-                              ROUTER / TRIAGE
-                              deterministic rules first, Haiku tie-break
-                              scores: $amount, vendor age, remit-to change,
-                              extraction confidence, novelty, hard flags
-                          ┌───────────┴────────────┐
-            LOW risk +    │                        │   HIGH risk / low conf /
-            high conf     ▼                        ▼   any hard flag
-                  CLEAN FAST-PATH            HEAVY PATH (parallel fan-out)
-                  deterministic 3-way        ┌────────┬─────────┬────────┐
-                  match + dup + sanctions  MATCHER  COMPLIANCE   RISK
-                  + split + bank allow-list (code+   (API +      (rules +
-                  No big LLM.                ERP/SQL) determ.     vector +
-                  Auto-PAY if ALL green               dedup/OFAC) LLM judge)
-                          │                  └────────┴─────────┴────────┘
-                          │  any exception              │
-                          │                             ▼
-                          │                  DECISION / SYNTHESIS
-                          │                  (Opus 4.8, heavy path only)
-                          │                  PAY/HOLD/ESCALATE + rationale +
-                          │                  citations. PROPOSAL ONLY, no tools.
-                          │                             │
-                          │              confidence + $ + policy tiered
-                          │              ┌──────────────┼───────────────┐
-                          │         auto (≥T_hi)   gray band        hard flag
-                          │              ▼              ▼               ▼
-                          │      DETERMINISTIC    HUMAN-IN-LOOP      ESCALATE
-                          └─────▶ GATE             GATE (clerk       (AP lead /
-                                 (recompute,       reviews evidence)  fraud team)
-                                  bank allow-list,        │              │
-                                  SoD, divergence)        │              │
-                                      └─────────────┬─────┴──────────────┘
-                                                    ▼
-                              PAYMENT CONTROLLER (non-LLM) → queue   ← crown-jewel sink
-                                                    ▼
-                              AUDIT LOG (append-only, hash-chained, replayable):
-                              inputs, tool I/O, model+version, confidence,
-                              citations, approvers, overrides
-                                                    ▼
-                              FEEDBACK / EVAL STORE (golden labels, threshold
-                              re-tuning, model A/B, drift detection)
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TD
+    INVOICE["Invoice PDF / email<br/>(attacker-controlled)"]
+    EXTRACTOR["INGEST + EXTRACTOR<br/>sandbox parse, disarm, AV (security boundary)<br/>OCR/parse (Haiku 4.5)<br/>content treated as DATA, delimited<br/>strict JSON schema + per-field confidence"]
+    ROUTER["ROUTER / TRIAGE<br/>deterministic rules first, Haiku tie-break<br/>scores: $amount, vendor age, remit-to change,<br/>extraction confidence, novelty, hard flags"]
+
+    FASTPATH["CLEAN FAST-PATH<br/>deterministic 3-way match + dup + sanctions<br/>+ split + bank allow-list<br/>No big LLM. Auto-PAY if ALL green"]
+
+    subgraph HEAVY["HEAVY PATH (parallel fan-out)"]
+        direction LR
+        MATCHER["MATCHER<br/>(code + ERP/SQL)"]
+        COMPLIANCE["COMPLIANCE<br/>(API + determ. dedup/OFAC)"]
+        RISK["RISK<br/>(rules + vector + LLM judge)"]
+    end
+
+    DECISION["DECISION / SYNTHESIS<br/>(Opus 4.8, heavy path only)<br/>PAY/HOLD/ESCALATE + rationale + citations<br/>PROPOSAL ONLY, no tools"]
+
+    GATE["DETERMINISTIC GATE<br/>(recompute, bank allow-list,<br/>SoD, divergence)"]
+    HITL["HUMAN-IN-LOOP GATE<br/>(clerk reviews evidence)"]
+    ESCALATE["ESCALATE<br/>(AP lead / fraud team)"]
+
+    CONTROLLER["PAYMENT CONTROLLER (non-LLM) → queue<br/>(crown-jewel sink)"]
+    AUDIT["AUDIT LOG (append-only, hash-chained, replayable)<br/>inputs, tool I/O, model+version, confidence,<br/>citations, approvers, overrides"]
+    FEEDBACK["FEEDBACK / EVAL STORE<br/>(golden labels, threshold re-tuning,<br/>model A/B, drift detection)"]
+
+    INVOICE --> EXTRACTOR
+    EXTRACTOR --> ROUTER
+    ROUTER -->|"LOW risk + high conf"| FASTPATH
+    ROUTER -->|"HIGH risk / low conf / any hard flag"| HEAVY
+
+    HEAVY --> DECISION
+    FASTPATH -->|"any exception"| DECISION
+
+    DECISION -->|"auto (≥T_hi)"| GATE
+    DECISION -->|"gray band"| HITL
+    DECISION -->|"hard flag"| ESCALATE
+
+    FASTPATH -->|"Auto-PAY if ALL green"| GATE
+
+    GATE --> CONTROLLER
+    HITL --> CONTROLLER
+    ESCALATE --> CONTROLLER
+
+    CONTROLLER --> AUDIT
+    AUDIT --> FEEDBACK
 ```
 
 ### Deterministic code vs LLM: the dividing line

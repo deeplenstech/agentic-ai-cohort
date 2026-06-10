@@ -132,46 +132,19 @@ After posting the Slack notification, the Orchestrator sets `sprint_status = PEN
 
 ## 6. Diagrams
 
-### 6.1 System Context Diagram
+### 6.1 Agent Map Diagram
 
 ```mermaid
-graph TD
-    SM["Scrum Master"]
-    TM["Team Members"]
-    JIRA["Jira (Project Board)"]
-    CAL["Google Calendar API"]
-    SLACK["Slack"]
-
-    subgraph SprintPlanningSystem["Sprint Planning System"]
-        ORCH["Orchestrator"]
-        BA["Backlog Analyst"]
-        CP["Capacity Planner"]
-        VH["Velocity Historian"]
-        CE["Complexity Estimator"]
-        SY["Draft Plan Synthesiser"]
-        MEM["Short-term Memory Store"]
-        LLM["LLM Inference (Amazon Bedrock)"]
-    end
-
-    SM -->|"Trigger: planning request"| ORCH
-    TM -->|"Calendar availability"| CAL
-    CAL -->|"Events for sprint window"| CP
-    JIRA -->|"Backlog issues, sprint history"| BA
-    JIRA -->|"Sprint history, completion data"| VH
-    JIRA -->|"Issue detail for few-shot"| CE
-    SY -->|"Create draft sprint, assign issues (Jira Agile REST API)"| JIRA
-    SY -->|"chat_postMessage: draft plan summary"| SLACK
-    SLACK -->|"Approval notification"| SM
-    SM -->|"Start Sprint (manual)"| JIRA
-    CE --> LLM
-    SY --> LLM
-    VH --> MEM
-    CE --> MEM
-```
-
-### 6.2 Agent Map Diagram
-
-```mermaid
+---
+config:
+  layout: elk
+  elk:
+    nodePlacementStrategy: NETWORK_SIMPLEX
+  flowchart:
+    nodeSpacing: 60
+    rankSpacing: 80
+    curve: linear
+---
 graph TD
     TRIGGER["Sprint Planning Trigger\n(Scrum Master or Scheduler)"]
     ORCH["Orchestrator"]
@@ -199,91 +172,6 @@ graph TD
     CE -->|"Estimated ticket list + capacity"| SY
     SY -->|"Draft sprint in Jira (DRAFT)\n+ Slack summary + review link"| APPROVE
     APPROVE -->|"Human clicks Start Sprint"| ACTIVATE
-```
-
-### 6.3 Sequence Diagram: Happy Path
-
-```mermaid
-sequenceDiagram
-    participant SM as Scrum Master
-    participant ORCH as Orchestrator
-    participant BA as Backlog Analyst
-    participant CP as Capacity Planner
-    participant VH as Velocity Historian
-    participant CE as Complexity Estimator
-    participant SY as Draft Plan Synthesiser
-    participant JIRA as Jira MCP
-    participant CAL as Calendar API
-    participant LLM as LLM Inference
-    participant SLACK as Slack
-
-    SM->>ORCH: trigger_sprint_planning(project, sprint_window, goal)
-    Note over ORCH: Fan-out to three agents simultaneously
-
-    par Backlog Analysis
-        ORCH->>BA: analyse_backlog(project_key)
-        BA->>JIRA: searchJiraIssuesUsingJql(status in Backlog or Ready)
-        JIRA-->>BA: ticket list with priority, points, labels
-        BA->>JIRA: getJiraIssue(ticket_id) for link/blocker detail
-        JIRA-->>BA: dependency and blocker links
-        BA-->>ORCH: ranked_candidates[], exclusion_list[]
-    and Capacity Planning
-        ORCH->>CP: compute_capacity(team_id, sprint_window)
-        CP->>JIRA: read team roster for project board
-        JIRA-->>CP: engineer list
-        CP->>CAL: list_events for sprint window per member
-        CAL-->>CP: calendar events per member
-        CP-->>ORCH: net_capacity_points
-    and Velocity History
-        ORCH->>VH: compute_velocity_baseline(project_key, last_n=8)
-        VH->>JIRA: searchJiraIssuesUsingJql(last 8 sprints)
-        JIRA-->>VH: issue lists with completion data
-        VH-->>ORCH: velocity_baseline, anomalous_sprint_ids[]
-    end
-
-    Note over ORCH: Converge - all three complete, Orchestrator assembles joint context
-    ORCH->>CE: estimate_tickets(unestimated_tickets[], velocity_context)
-    CE->>JIRA: getJiraIssue(ticket_id) for each unestimated ticket
-    JIRA-->>CE: full description and acceptance criteria
-    CE->>JIRA: searchJiraIssuesUsingJql(similar estimated tickets, by component+type, recent)
-    JIRA-->>CE: few-shot example tickets with points
-    CE->>LLM: estimate_complexity(few_shot_examples, target_ticket)
-    LLM-->>CE: points_range, midpoint, confidence
-    CE-->>ORCH: estimated_candidates[] with ai_estimated flags
-
-    ORCH->>SY: synthesise_plan(estimated_candidates[], net_capacity, velocity_baseline)
-    Note over SY: Greedy single-pass selection - skip a ticket if adding it would exceed capacity
-    SY->>SY: greedy_select(candidates[], net_capacity)
-
-    alt plan feasible - at least one ticket selected
-        SY->>LLM: annotate_tickets(selected_tickets[], capacity, velocity)
-        LLM-->>SY: annotations and risks
-    else entire list exhausted with no feasible ticket
-        SY->>ORCH: EscalationReport (over_commit / split_largest / extend_sprint)
-        ORCH->>SLACK: post_message(channel, EscalationOptions)
-    end
-
-    Note over SY: Check idempotency via state store
-    SY->>SY: check_state_store(key=sprint-plan-run:{run_id})
-    SY->>JIRA: Create DRAFT sprint (Jira Agile REST API)
-    JIRA-->>SY: sprint_id
-    SY->>SY: write_state_store(key=sprint-plan-run:{run_id}, sprint_id)
-    SY->>JIRA: Assign selected issues to sprint (idempotent)
-    JIRA-->>SY: 200 OK
-    SY->>SLACK: chat_postMessage(sprint_name, committed_points, capacity, velocity_trend, top_tickets, review_link)
-    SLACK-->>SY: message_ts
-    SY-->>ORCH: plan_delivered(sprint_id, slack_ts)
-
-    ORCH-->>ORCH: set sprint_status=PENDING_APPROVAL in state store
-    ORCH-->>SM: planning_complete(sprint_id, jira_url, slack_url)
-
-    Note over SM: Human reviews draft in Jira and may swap or remove tickets
-    alt SM approves
-        SM->>JIRA: Start Sprint (manual, Jira UI)
-        JIRA-->>SM: Sprint started
-    else SM rejects or modifies
-        Note over SM: SM plans manually or triggers a new agent run
-    end
 ```
 
 ---

@@ -82,7 +82,7 @@ A purely parallel fan-out would be incorrect here. Classification must precede d
 
 ## 5. Data & Control Flow
 
-**Trigger:** A new bug ticket is created in Jira. The **Event Forwarder** (a plain webhook endpoint or scheduled JQL poller, not an agent) detects it either via a Jira webhook `POST` or by executing a JQL query on a short poll interval. This step involves no LLM. The raw issue JSON is normalised into a standard `BugEvent` object containing `issue_key`, `title`, `description`, `reporter`, `project`, `labels`, and `created_at`. The object is placed on the Redis/SQS queue with a unique `event_id`. The agent pipeline begins at Stage 2 when the Classification Agent dequeues this event.
+**Trigger:** A new bug ticket is created in Jira. The **Event Forwarder** (a plain webhook endpoint or scheduled JQL poller, not an agent) detects it either via a Jira webhook `POST` or by executing a JQL query on a short poll interval. This step involves no LLM. The raw issue JSON is normalised into a standard `BugEvent` object containing `issue_key`, `title`, `description`, `reporter`, `project`, `labels`, and `created_at`. The object is placed on the SQS queue with a unique `event_id`. The agent pipeline begins at Stage 2 when the Classification Agent dequeues this event.
 
 **Stage 2, Classification:** The Classification Agent dequeues the `BugEvent`. Before building the prompt, it passes the `title` and `description` through a shared PII scrubber (the same pre-processor used in Stage 3, see NFR 4). The scrubbed content is sent to the LLM in a structured prompt containing the P0 to P3 severity rubric, a component taxonomy, and a list of bug types. The LLM returns a JSON object with `severity`, `component`, `bug_type`, `confidence`, and `reasoning`. A single confidence threshold of **0.75** is applied uniformly across all severity levels. If `confidence < 0.75`, the agent comments the LLM's reasoning via `addCommentToJiraIssue`, moves the ticket to a `Needs Human Triage` status via `transitionJiraIssue`, alerts the triage Slack channel, and ends the run. Otherwise it calls `editJiraIssue` to apply `severity` as the priority, `component` as a Jira component, and `bug_type` as a label. The `confidence` and `reasoning` are stored in the shared pipeline context.
 
@@ -96,167 +96,30 @@ A purely parallel fan-out would be incorrect here. Classification must precede d
 
 ## 6. Diagrams
 
-### 6.1 System Context Diagram
-
-```mermaid
-graph TD
-    subgraph "External Actors"
-        ENG["Engineers / On-Call Team"]
-        JIRA_EXT["Jira (External Bug Reports)"]
-        SLACK_EXT["Slack"]
-        PD_EXT["PagerDuty"]
-        BEDROCK_EXT["Amazon Bedrock<br/>(KB + Titan Embeddings)"]
-        OWNERSHIP_EXT["Ownership Registry<br/>(component → engineers)"]
-        RULES_EXT["Routing Rules<br/>(Postgres, preference scores)"]
-    end
-
-    subgraph "Bug Triage System"
-        INGEST["Event Forwarder<br/>(Webhook / JQL Poll, infrastructure)"]
-        CLASSIFY["Classification + Deduplication<br/>(LLM + Bedrock Embeddings)"]
-        ROUTE["Routing + Notification<br/>(Ownership Lookup + Alerts)"]
-    end
-
-    JIRA_EXT -->|"New bug ticket event (webhook / JQL poll)"| INGEST
-    INGEST --> CLASSIFY
-    CLASSIFY --> ROUTE
-    ROUTE -->|"editJiraIssue: severity, component, assignee"| JIRA_EXT
-    ROUTE -->|"addCommentToJiraIssue: triage notes, routing rationale"| JIRA_EXT
-    CLASSIFY -->|"createIssueLink: duplicate linkage"| JIRA_EXT
-    ROUTE -->|"chat.postMessage: triage notification"| SLACK_EXT
-    ROUTE -->|"POST /incidents: P0 alert"| PD_EXT
-    CLASSIFY -->|"ingest / retrieve: deduplication"| BEDROCK_EXT
-    CLASSIFY -->|"embed: titan-embed-text-v2"| BEDROCK_EXT
-    ROUTE -->|"lookup component owners"| OWNERSHIP_EXT
-    ROUTE -->|"SELECT preference_score (read at routing time)"| RULES_EXT
-    SLACK_EXT -->|"Alert delivered to engineer"| ENG
-    PD_EXT -->|"Page delivered to on-call engineer"| ENG
-    ENG -->|"Reassigns ticket (feedback signal)"| JIRA_EXT
-    JIRA_EXT -->|"Changelog event (reassignment)"| CLASSIFY
-    CLASSIFY -->|"UPSERT preference_score (async, 1hr cadence)"| RULES_EXT
-```
-
 ### 6.2 Agent Map Diagram
 
 ```mermaid
+---
+config:
+  layout: elk
+  elk:
+    nodePlacementStrategy: NETWORK_SIMPLEX
+  flowchart:
+    nodeSpacing: 60
+    rankSpacing: 80
+    curve: linear
+---
 graph TD
-    EF["Event Forwarder<br/>(Webhook / JQL Poller)<br/>infrastructure, no LLM"]
+    EF["Event Forwarder<br/>(Webhook / JQL Poller)"]
     CA["Classification Agent"]
     DA["Deduplication Agent"]
     RA["Routing Agent<br/>(+ Notification)"]
     FLA["Feedback Learning Agent"]
 
-    QUEUE[("Redis / SQS Queue")]
-    JIRA[("Jira MCP Server")]
-    LLM[("LLM - Claude Sonnet")]
-    BEDROCK[("Amazon Bedrock KB<br/>+ Titan Embeddings")]
-    REGISTRY[("Ownership Registry<br/>(component → engineers,<br/>last_assigned_at)")]
-    RULES[("Routing Rules<br/>(Postgres)<br/>project × component ×<br/>bug_type × severity →<br/>preference_score")]
-    SLACK[("Slack API")]
-    PD[("PagerDuty API")]
-
-    EF -->|"enqueue BugEvent"| QUEUE
-    QUEUE -->|"dequeue BugEvent"| CA
-
-    CA -->|"PII-scrubbed classify prompt"| LLM
-    LLM -->|"severity, component, bug_type, confidence"| CA
-    CA -->|"editJiraIssue: labels and priority"| JIRA
-
+    EF -->|"BugEvent"| CA
     CA -->|"classified BugEvent"| DA
-    DA -->|"embed: titan-embed-text-v2"| BEDROCK
-    BEDROCK -->|"1024-dim vector"| DA
-    DA -->|"retrieve top-5 (cosine similarity)"| BEDROCK
-    BEDROCK -->|"candidate matches + similarity scores"| DA
-    DA -->|"dedup prompt: new ticket + top-5 candidates"| LLM
-    LLM -->|"is_duplicate, duplicate_of, reasoning"| DA
-    DA -->|"ingest: new ticket embedding"| BEDROCK
-    DA -->|"createIssueLink: duplicate"| JIRA
-    DA -->|"transitionJiraIssue: Duplicate status"| JIRA
-    DA -->|"addCommentToJiraIssue: LLM duplicate reasoning"| JIRA
-
     DA -->|"deduplicated BugEvent"| RA
-    RA -->|"lookup component owners"| REGISTRY
-    RA -->|"searchJiraIssuesUsingJql: workload query"| JIRA
-    JIRA -->|"open P0 and P1 counts per engineer"| RA
-    RA -->|"SELECT preference_score WHERE project+component+bug_type+severity"| RULES
-    RULES -->|"preference_score, correction_count per engineer"| RA
-    RA -->|"editJiraIssue: assignee and team"| JIRA
-    RA -->|"addCommentToJiraIssue: routing rationale with scores"| JIRA
-    RA -->|"chat.postMessage: triage notification"| SLACK
-    RA -->|"POST /incidents: P0 only"| PD
-    RA -->|"addCommentToJiraIssue: notification audit"| JIRA
-
-    FLA -->|"searchJiraIssuesUsingJql: reassigned tickets"| JIRA
-    JIRA -->|"changelog events"| FLA
-    FLA -->|"UPSERT preference_score + correction_count"| RULES
-    FLA -->|"addCommentToJiraIssue: rule update audit"| JIRA
-```
-
-### 6.3 Sequence Diagram (Happy Path)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant J as Jira
-    participant EF as Event Forwarder (infrastructure)
-    participant Q as Queue
-    participant CA as Classification Agent
-    participant LLM as LLM (Claude)
-    participant DA as Deduplication Agent
-    participant BEDROCK as Amazon Bedrock KB
-    participant RA as Routing Agent
-    participant REG as Ownership Registry
-    participant PGrules as Routing Rules (Postgres)
-    participant SL as Slack
-    participant PD as PagerDuty
-
-    J->>EF: webhook: issue_created (BUG-4821)
-    Note over EF: Normalise raw Jira JSON → BugEvent (no LLM)
-    EF->>Q: enqueue(BugEvent{issue_key, title, description})
-    Q->>CA: dequeue(BugEvent)
-    Note over CA: PII scrub: redact emails and phones before LLM call
-    CA->>LLM: classify_bug(scrubbed_title, scrubbed_description, severity_rubric)
-    LLM-->>CA: severity=P0, component=auth-service, bug_type=security, confidence=0.94
-    CA->>J: editJiraIssue(BUG-4821, priority=P0, component=auth-service, labels=[security, AUTO-TRIAGE])
-    CA->>DA: forward(classified_BugEvent)
-
-    DA->>BEDROCK: embed via titan-embed-text-v2(title + description + component + bug_type)
-    BEDROCK-->>DA: vector[1024-dim]
-    DA->>BEDROCK: retrieve(BEDROCK_KB_ID, vector, top_k=5, filter={status: Open})
-    BEDROCK-->>DA: candidates=[BUG-4710 sim=0.61, BUG-4799 sim=0.55, ...]
-    DA->>LLM: dedup_prompt(new_ticket, top_5_candidates_with_similarity_scores)
-    LLM-->>DA: is_duplicate=false, duplicate_of=null, confidence=0.92, reasoning=distinct failure modes
-
-    alt LLM verdict: is_duplicate = true
-        DA->>J: createIssueLink(new_issue, duplicates, original_issue)
-        DA->>J: transitionJiraIssue(new_issue, status=Duplicate)
-        DA->>J: addCommentToJiraIssue(new_issue, AUTO-TRIAGE - LLM identified as duplicate of original_issue)
-    else LLM verdict: is_duplicate = false (new bug)
-        DA->>RA: DeduplicationResult{is_duplicate: false, new_issue_id}
-    end
-
-    DA->>BEDROCK: ingest(BEDROCK_KB_ID, BUG-4821, vector, metadata)
-    DA->>RA: forward(deduplicated_BugEvent)
-
-    RA->>REG: lookup_owners(component=auth-service)
-    REG-->>RA: [engineer_A, engineer_B, engineer_C]
-    RA->>J: searchJiraIssuesUsingJql(assignee=engineer_A AND priority in (P0,P1) AND status != Done)
-    J-->>RA: 2 open P0s (load_score=6)
-    RA->>J: searchJiraIssuesUsingJql(assignee=engineer_B AND priority in (P0,P1) AND status != Done)
-    J-->>RA: 0 open P0s, 1 open P1 (load_score=1)
-    RA->>PGrules: SELECT preference_score WHERE project=ENG AND component=auth-service AND bug_type=security AND severity=P0
-    PGrules-->>RA: engineer_A=1.0, engineer_B=0.85, engineer_C=1.15
-    Note over RA: final_score = load/pref. A: 6.0, B: 1.18, C: 2.61. engineer_B lowest
-    RA->>J: editJiraIssue(BUG-4821, assignee=engineer_B, team=platform-security)
-    RA->>J: addCommentToJiraIssue(BUG-4821, AUTO-TRIAGE - Routed to engineer_B final=1.18, candidates: A=6.0 B=1.18 C=2.61)
-    RA->>SL: chat.postMessage(channel=engineer_B_DM, P0 BUG-4821 assigned: auth-service security issue)
-    RA->>SL: chat.postMessage(channel=platform-security-alerts, P0 BUG-4821 triaged and assigned to engineer_B)
-
-    opt severity == P0
-        RA->>PD: POST /incidents title=P0 BUG-4821 auth-service security, urgency=high
-        PD-->>RA: incident_id=INC-9034
-    end
-
-    RA->>J: addCommentToJiraIssue(BUG-4821, AUTO-TRIAGE - Notified: Slack DM engineer_B, platform-security-alerts, PagerDuty INC-9034)
+    FLA -.->|"reassignment corrections<br/>(async, 1hr cadence)"| RA
 ```
 
 ---
@@ -296,7 +159,7 @@ sequenceDiagram
 **Risk:** Any stage failure (LLM timeout, Jira MCP server unavailable, Slack API rate limit) could cause a P0 ticket to sit unnoticed indefinitely. A retry loop without a dead-letter mechanism could cause a permanently failing ticket to block the queue, starving other tickets behind it.
 
 **Design Approach:**
-- The processing queue (Redis Streams or AWS SQS with a visibility timeout) provides at-least-once delivery. If a stage crashes mid-processing, the ticket event becomes visible again after the timeout and is retried by the next available worker.
+- The processing queue (AWS SQS with a visibility timeout) provides at-least-once delivery. If a stage crashes mid-processing, the ticket event becomes visible again after the timeout and is retried by the next available worker.
 - Each stage retries up to 3 times with exponential backoff. After 3 failures, the event is moved to a Dead-Letter Queue (DLQ) and a Slack alert is sent to the ops channel with the `issue_key` and last error.
 - When the downstream service recovers, the system replays DLQ items in FIFO order. Replay writes are idempotent, guarded by `issue_id` deduplication. A P0 ticket entering the DLQ triggers an immediate out-of-band Slack alert to the on-call engineer before any replay attempt.
 - For P0 tickets, the Routing Agent has a secondary notification path. If the Slack `chat.postMessage` call fails, it falls back to an in-Jira notification via `addCommentToJiraIssue` plus the watch mechanism, so the assignee is still notified even if Slack is down.
@@ -360,15 +223,14 @@ All components of the Bug Triage pipeline require the following environment vari
 | `BEDROCK_REGION` | Deduplication Agent | AWS region where the Bedrock KB is deployed (must match the region used to create the KB) |
 | `SLACK_BOT_TOKEN` | Routing Agent | OAuth bot token for the Slack `chat.postMessage` API |
 | `PAGERDUTY_API_KEY` | Routing Agent | PagerDuty REST API v2 token for creating P0 incidents |
-| `REDIS_URL` | Event Forwarder, all pipeline stages | Connection string for the Redis Streams queue (e.g., `redis://host:6379/0`). If using AWS SQS instead, replace with `SQS_QUEUE_URL` and `SQS_DLQ_URL`. |
-| `SQS_QUEUE_URL` | Event Forwarder, all pipeline stages | (SQS deployments only) URL of the primary SQS FIFO queue for `BugEvent` processing |
-| `SQS_DLQ_URL` | All pipeline stages | (SQS deployments only) URL of the Dead-Letter Queue; events failing after 3 retries are moved here |
-| `OWNERSHIP_REGISTRY_URL` | Routing Agent | Connection string or REST endpoint for the Ownership Registry (Redis or Postgres), holding component-to-engineer mappings and `last_assigned_at` timestamps |
+| `SQS_QUEUE_URL` | Event Forwarder, all pipeline stages | URL of the primary SQS FIFO queue for `BugEvent` processing |
+| `SQS_DLQ_URL` | All pipeline stages | URL of the Dead-Letter Queue; events failing after 3 retries are moved here |
+| `OWNERSHIP_REGISTRY_URL` | Routing Agent | Postgres connection string for the Ownership Registry, holding component-to-engineer mappings and `last_assigned_at` timestamps |
 | `ROUTING_RULES_DB_URL` | Routing Agent, Feedback Learning Agent | Postgres connection string for the `routing_rules` table (preference scores and correction counts per tuple). Read by the Routing Agent at decision time, written by the Feedback Learning Agent after each detected reassignment |
 
 **Notes:**
 - `BEDROCK_KB_ID` is consumed exclusively by the Deduplication Agent for KB retrieval and ingestion. The Feedback Learning Agent does not access the Bedrock KB. The Knowledge Base handles embedding internally using the configured embedding model, so no separate embedding API key is required beyond standard AWS credentials.
 - `JIRA_API_KEY` corresponds to the Basic Auth credential used by the Atlassian Rovo MCP server (`mcp__claude_ai_Atlassian_Rovo__*` tools). The MCP server handles authentication header construction, and agents pass the key as a configuration parameter at server initialisation time.
-- For Redis deployments, `REDIS_URL` serves as both the work queue and the Ownership Registry backing store if the registry is implemented as a Redis hash. In Postgres-backed registry deployments, `OWNERSHIP_REGISTRY_URL` will be a separate Postgres connection string.
-- `ROUTING_RULES_DB_URL` always points to Postgres regardless of the registry backing store. The `routing_rules` table requires SQL semantics (upsert, wildcard ordering, decay update) that Redis does not natively support. The Routing Agent and Feedback Learning Agent are the only two components that connect to this database.
+- The work queue is always AWS SQS (`SQS_QUEUE_URL` and `SQS_DLQ_URL`). The Ownership Registry is a separate Postgres store addressed by `OWNERSHIP_REGISTRY_URL`, holding component-to-engineer mappings and `last_assigned_at` timestamps.
+- `ROUTING_RULES_DB_URL` points to Postgres for the `routing_rules` table, which requires SQL semantics (upsert, wildcard ordering, decay update). The Routing Agent and Feedback Learning Agent are the only two components that connect to this database.
 - All tokens must be stored in **AWS Secrets Manager** and rotated on a 90-day cycle. Never commit secrets to source control or store them in plaintext config files.
